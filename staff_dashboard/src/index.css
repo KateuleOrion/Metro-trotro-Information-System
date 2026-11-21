@@ -1,0 +1,158 @@
+html {
+    zoom: 0.85;
+}
+
+:root {
+    --green: #1B6B45;
+    --bg: #F6F7F4;
+    --text: #14201A;
+    --muted: #5B6B63;
+    --border: #DCE3DE;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+}
+
+.page {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px;
+}
+
+nav {
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+nav a {
+    color: var(--text);
+    text-decoration: none;
+    padding: 8px 12px;
+    border-radius: 8px;
+}
+
+nav a.active {
+    background: var(--green);
+    color: #fff;
+}
+
+nav .spacer {
+    flex: 1;
+}
+
+.card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th,
+td {
+    text-align: left;
+    padding: 12px;
+    border-top: 1px solid var(--border);
+}
+
+th {
+    font-size: 13px;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-top: 0;
+}
+
+input,
+select,
+button {
+    font: inherit;
+    min-height: 44px;
+    padding: 0 12px;
+    border-radius: 10px;
+    border: 1px solid #B9C5BE;
+}
+
+button {
+    background: var(--green);
+    color: #fff;
+    border: 0;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+button.secondary {
+    background: #fff;
+    color: var(--text);
+    border: 1px solid #B9C5BE;
+    font-weight: 500;
+}
+
+form.row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: end;
+}
+
+label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.error {
+    color: #9B1C1C;
+    background: #FDECEC;
+    padding: 10px 14px;
+    border-radius: 10px;
+}
+
+.muted {
+    color: var(--muted);
+}
+
+.chip {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: #DDF3E6;
+    color: #14532D;
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.login {
+    max-width: 380px;
+    margin: 80px auto;
+}
+
+.login form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
