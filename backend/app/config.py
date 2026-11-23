@@ -1,0 +1,27 @@
+"""Settings, read from environment variables (or a .env file)."""
+import os
+import warnings
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:password@localhost:5432/metro_trotro")
+JWT_SECRET = os.getenv("JWT_SECRET", "change-this-to-a-long-random-string")
+JWT_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", "12"))
+CORS_ORIGINS = [
+    o.strip()
+    for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
+    if o.strip()
+]
+DEFAULT_STATION_ID = int(os.getenv("DEFAULT_STATION_ID", "1"))
+
+# Queue positions must stay between 1 and 999 (database rule); we keep the queue compact (1..n).
+MAX_QUEUE = 400
+
+# Login protection: this many wrong passwords for one email within the window locks sign-in briefly.
+LOGIN_MAX_FAILURES = 5
+LOGIN_WINDOW_SECONDS = 300
+
+if JWT_SECRET == "change-this-to-a-long-random-string":
+    warnings.warn("JWT_SECRET is the default value. Set a long random value in .env before deploying.")
