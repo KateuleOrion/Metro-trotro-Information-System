@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import LastUpdated from "../components/LastUpdated";
 
+const REFRESH_SECONDS = 15; // other staff may change the queue, so it refreshes by itself
+
 export default function Queue() {
   const [queue, setQueue] = useState([]);
   const [vehicles, setVehicles] = useState([]);
@@ -23,16 +25,18 @@ export default function Queue() {
 
   useEffect(() => {
     load();
+    const timer = setInterval(load, REFRESH_SECONDS * 1000);
+    return () => clearInterval(timer);
   }, []);
 
   async function run(action) {
     try {
       await action();
       setError("");
-      await load();
     } catch (err) {
       setError(err.message);
     }
+    await load(); // reload either way, so the screen always shows the real queue
   }
 
   function move(index, direction) {
@@ -53,8 +57,7 @@ export default function Queue() {
     setSelected("");
   }
 
-  const inQueue = queue.map((q) => q.vehicle.id);
-  const notQueued = vehicles.filter((v) => !inQueue.includes(v.id));
+  const canArrive = vehicles.filter((v) => !v.in_queue && v.status !== "unavailable");
 
   return (
     <>
@@ -67,8 +70,10 @@ export default function Queue() {
           <label>
             Vehicle
             <select value={selected} onChange={(e) => setSelected(e.target.value)}>
-              <option value="">{notQueued.length ? "Select vehicle" : "No vehicles available"}</option>
-              {notQueued.map((v) => <option key={v.id} value={v.id}>{v.plate_number}</option>)}
+              <option value="">
+                {vehicles.length === 0 ? "No vehicles added yet" : canArrive.length ? "Select vehicle" : "All vehicles are in the queue"}
+              </option>
+              {canArrive.map((v) => <option key={v.id} value={v.id}>{v.plate_number}</option>)}
             </select>
           </label>
           <button type="submit">Record arrival</button>
@@ -81,28 +86,36 @@ export default function Queue() {
         ) : (
           <table>
             <thead>
-              <tr><th>#</th><th>Plate</th><th>Arrived</th><th>Seats available</th><th>Actions</th></tr>
+              <tr>
+                <th>#</th><th>Registration</th><th>Arrived</th><th>Status</th><th>Seats available</th><th>Actions</th>
+              </tr>
             </thead>
             <tbody>
-              {queue.map((q, i) => (
-                <tr key={q.vehicle.id}>
-                  <td>{q.position}</td>
-                  <td>{q.vehicle.plate_number}</td>
-                  <td>{new Date(q.arrived_at).toLocaleTimeString()}</td>
-                  <td>{q.vehicle.seats_available} of {q.vehicle.seats_total}</td>
-                  <td style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button className="secondary" onClick={() => move(i, -1)} disabled={i === 0}>
-                      Move up
-                    </button>
-                    <button className="secondary" onClick={() => move(i, 1)} disabled={i === queue.length - 1}>
-                      Move down
-                    </button>
-                    <button onClick={() => run(() => api.recordDeparture(q.vehicle.id))}>
-                      Record departure
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {queue.map((q, i) => {
+                const loading = q.queue_status === "loading";
+                return (
+                  <tr key={q.vehicle.id}>
+                    <td>{q.position}</td>
+                    <td>{q.vehicle.plate_number}</td>
+                    <td>{new Date(q.arrived_at).toLocaleTimeString()}</td>
+                    <td><span className="chip">{loading ? "Loading" : "Waiting"}</span></td>
+                    <td>
+                      {q.vehicle.seats_available ?? "Unavailable"}
+                      <span className="muted"> of {q.vehicle.seats_total}</span>
+                    </td>
+                    <td style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button className="secondary" onClick={() => move(i, -1)} disabled={i === 0}>Move up</button>
+                      <button className="secondary" onClick={() => move(i, 1)} disabled={i === queue.length - 1}>Move down</button>
+                      <button className="secondary"
+                        onClick={() => run(() => api.updateVehicle(q.vehicle.id, { status: loading ? "queued" : "loading" }))}>
+                        {loading ? "Back to waiting" : "Start loading"}
+                      </button>
+                      <button onClick={() => run(() => api.recordDeparture(q.vehicle.id))}>Record departure</button>
+                      <button className="secondary" onClick={() => run(() => api.removeFromQueue(q.vehicle.id))}>Remove</button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

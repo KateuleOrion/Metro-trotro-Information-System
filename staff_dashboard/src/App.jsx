@@ -29,7 +29,7 @@ export default function App() {
       <main className="page">
         <Routes>
           <Route path="/queue" element={<Queue />} />
-          <Route path="/vehicles" element={<Vehicles />} />
+          <Route path="/vehicles" element={<Vehicles user={user} />} />
           <Route path="/trips" element={<Trips />} />
           <Route path="*" element={<Navigate to="/queue" />} />
         </Routes>
