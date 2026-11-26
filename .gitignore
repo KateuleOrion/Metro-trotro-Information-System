@@ -1,0 +1,13 @@
+# secrets and local settings - never commit these
+.env
+.env.local
+*.local
+
+# installed or generated things
+node_modules/
+dist/
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/

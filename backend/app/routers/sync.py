@@ -59,7 +59,7 @@ def _save_result(conn, staff_id: int, rec: SyncRecord, ok: bool, error):
 
 @router.post("/batch")
 @router.post("/upload")  # the name used by the first version of the sync backend
-def upload(body: SyncBatchIn, staff=Depends(current_staff), conn=Depends(get_conn)):
+def upload(body: SyncBatchIn, staff=Depends(current_staff), conn=Depends(get_conn, scope="function")):
     staff_id = staff["staff_id"]  # always taken from the token, never from the request body
     synced, failed, valid = [], [], []
 

@@ -25,7 +25,7 @@ def _check_not_locked(email: str):
 
 
 @router.post("/login")
-def login(body: LoginIn, conn=Depends(get_conn)):
+def login(body: LoginIn, conn=Depends(get_conn, scope="function")):
     email = body.email.strip().lower()
     _check_not_locked(email)
     row = conn.execute(

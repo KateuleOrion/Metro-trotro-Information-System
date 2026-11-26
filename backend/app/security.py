@@ -43,7 +43,7 @@ def create_token(staff_id: int, role: str) -> str:
     return jwt.encode(payload, config.JWT_SECRET, algorithm="HS256")
 
 
-def current_staff(creds: HTTPAuthorizationCredentials | None = Depends(bearer), conn=Depends(get_conn)) -> dict:
+def current_staff(creds: HTTPAuthorizationCredentials | None = Depends(bearer), conn=Depends(get_conn, scope="function")) -> dict:
     """Requires a valid token for an active staff account."""
     if creds is None:
         raise ApiError(401, "Please sign in")

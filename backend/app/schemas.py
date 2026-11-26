@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 VehicleStatus = Literal["available", "queued", "loading", "departed", "unavailable"]
 
@@ -18,11 +18,27 @@ class LoginIn(Base):
 
 
 class VehicleCreate(Base):
+    """A vehicle. The route is given by route_id, or by typing a destination (an existing route to
+    the same destination is reused). The driver must already be registered: give their driver_id.
+    New drivers are added only by approving a driver registration request (/driver/requests).
+    All of it is saved in one step: if anything fails, nothing is saved."""
     registration_number: str = Field(min_length=1, max_length=20)
-    route_id: int
+    route_id: Optional[int] = None
+    destination: Optional[str] = Field(default=None, min_length=1, max_length=100)
     capacity: int = Field(ge=1, le=100)
     driver_id: Optional[int] = None
+    # Kept only to give a clear message to old clients: typing a new driver here is no longer allowed.
+    driver_name: Optional[str] = None
+    driver_phone: Optional[str] = None
     available_seats: Optional[int] = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def route_is_required(self):
+        if self.route_id is None and not self.destination:
+            raise ValueError("Give a route_id or a destination")
+        if self.driver_name or self.driver_phone:
+            raise ValueError("New drivers must send a registration request. Choose a registered driver by driver_id")
+        return self
 
 
 class VehicleUpdate(Base):
@@ -41,9 +57,25 @@ class QueueOrderIn(Base):
     station_id: Optional[int] = None
 
 
-class DriverCreate(Base):
-    driver_name: str = Field(min_length=1, max_length=100)
-    phone_number: Optional[str] = Field(default=None, pattern=r"^[0-9+ ]{7,20}$")
+class DriverRequestIn(Base):
+    """A driver's request to be registered. The vehicle details are optional, but if one of
+    registration_number, destination or capacity is given, all three are needed."""
+    full_name: str = Field(min_length=2, max_length=100)
+    phone_number: str = Field(pattern=r"^[0-9+ ]{7,20}$")
+    registration_number: Optional[str] = Field(default=None, min_length=1, max_length=20)
+    destination: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    capacity: Optional[int] = Field(default=None, ge=1, le=100)
+
+    @model_validator(mode="after")
+    def vehicle_details_together(self):
+        given = [self.registration_number, self.destination, self.capacity]
+        if any(x is not None for x in given) and not all(x is not None for x in given):
+            raise ValueError("To register a vehicle, give its registration number, destination and number of seats")
+        return self
+
+
+class RejectIn(Base):
+    reason: Optional[str] = Field(default=None, max_length=255)
 
 
 class RouteCreate(Base):
@@ -65,3 +97,17 @@ class SyncRecord(Base):
 class SyncBatchIn(Base):
     device_id: str = Field(min_length=1, max_length=100)
     records: list[dict] = Field(max_length=500)
+
+
+class PositionIn(Base):
+    """One location report for a vehicle (for example from the driver's phone)."""
+    vehicle_id: int
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    speed_kmh: Optional[float] = Field(default=None, ge=0, le=200)
+    recorded_at: Optional[datetime] = None
+
+
+class LocationIn(Base):
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)

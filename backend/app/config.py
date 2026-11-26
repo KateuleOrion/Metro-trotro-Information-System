@@ -23,5 +23,12 @@ MAX_QUEUE = 400
 LOGIN_MAX_FAILURES = 5
 LOGIN_WINDOW_SECONDS = 300
 
-if JWT_SECRET == "change-this-to-a-long-random-string":
+# Set APP_ENV=production in .env on the real server. The server then refuses to start with a weak secret.
+APP_ENV = os.getenv("APP_ENV", "development").lower()
+if JWT_SECRET == "change-this-to-a-long-random-string" or len(JWT_SECRET) < 32:
+    if APP_ENV == "production":
+        raise RuntimeError(
+            "JWT_SECRET is missing, still the default, or shorter than 32 characters. Create one with: "
+            'python -c "import secrets; print(secrets.token_urlsafe(48))"  and put it in .env'
+        )
     warnings.warn("JWT_SECRET is the default value. Set a long random value in .env before deploying.")

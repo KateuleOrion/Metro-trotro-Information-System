@@ -7,7 +7,7 @@ router = APIRouter(tags=["Activity log"])
 
 
 @router.get("/activity")
-def activity(limit: int = Query(50, ge=1, le=500), staff=Depends(require_manager), conn=Depends(get_conn)):
+def activity(limit: int = Query(50, ge=1, le=500), staff=Depends(require_manager), conn=Depends(get_conn, scope="function")):
     """Who did what and when (station manager only)."""
     return conn.execute(
         """SELECT a.audit_id, a.created_at, a.action, a.entity_name, a.entity_id, a.details,

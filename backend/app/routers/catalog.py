@@ -5,7 +5,7 @@ from psycopg import errors as pg
 from ..db import get_conn
 from ..errors import ApiError
 from .. import config
-from ..schemas import DriverCreate, RouteCreate
+from ..schemas import RouteCreate
 from ..security import current_staff, require_manager
 from ..services import audit
 
@@ -18,12 +18,12 @@ FROM routes r JOIN destinations d ON d.destination_id = r.destination_id
 
 
 @router.get("/routes")
-def list_routes(conn=Depends(get_conn)):
+def list_routes(conn=Depends(get_conn, scope="function")):
     return conn.execute(ROUTE_SQL + " WHERE r.is_active ORDER BY r.route_name").fetchall()
 
 
 @router.post("/routes", status_code=201)
-def create_route(body: RouteCreate, staff=Depends(require_manager), conn=Depends(get_conn)):
+def create_route(body: RouteCreate, staff=Depends(require_manager), conn=Depends(get_conn, scope="function")):
     station_id = body.station_id or config.DEFAULT_STATION_ID
     station = conn.execute("SELECT station_name FROM stations WHERE station_id = %s AND is_active", (station_id,)).fetchone()
     if not station:
@@ -50,18 +50,8 @@ def create_route(body: RouteCreate, staff=Depends(require_manager), conn=Depends
 
 
 @router.get("/drivers")
-def list_drivers(staff=Depends(current_staff), conn=Depends(get_conn)):
+def list_drivers(staff=Depends(current_staff), conn=Depends(get_conn, scope="function")):
     return conn.execute("SELECT driver_id, driver_name, phone_number FROM drivers ORDER BY driver_name").fetchall()
 
-
-@router.post("/drivers", status_code=201)
-def create_driver(body: DriverCreate, staff=Depends(require_manager), conn=Depends(get_conn)):
-    try:
-        row = conn.execute(
-            "INSERT INTO drivers (driver_name, phone_number) VALUES (%s, %s) RETURNING driver_id, driver_name, phone_number",
-            (body.driver_name, body.phone_number or None),
-        ).fetchone()
-    except pg.UniqueViolation:
-        raise ApiError(409, "A driver with this phone number already exists")
-    audit(conn, staff["staff_id"], "DRIVER_CREATED", "drivers", row["driver_id"])
-    return row
+# New drivers are not added here: they send a registration request (see driver_requests.py)
+# and are created when the station manager approves it.

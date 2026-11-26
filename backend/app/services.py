@@ -8,6 +8,7 @@ Queue rules (see the vehicle_queue table):
 from datetime import datetime, timezone
 from typing import Optional
 
+from psycopg import errors as pg
 from psycopg.types.json import Jsonb
 
 from . import config
@@ -94,6 +95,46 @@ def renumber(conn, queue_ids: list[int]):
             "UPDATE vehicle_queue SET queue_position = %s, last_updated = CURRENT_TIMESTAMP WHERE queue_id = %s",
             [(i + 1, qid) for i, qid in enumerate(queue_ids)],
         )
+
+
+# ---------------------------------------------------------------- routes and drivers typed by staff
+def find_or_create_route(conn, staff_id: int, destination: str, station_id: Optional[int] = None) -> int:
+    """Returns the id of the active route to this destination at the station, creating it if needed.
+    The route is named 'Station - Destination', the same way POST /routes names it."""
+    station_id = station_id or config.DEFAULT_STATION_ID
+    station = conn.execute(
+        "SELECT station_name FROM stations WHERE station_id = %s AND is_active", (station_id,)
+    ).fetchone()
+    if not station:
+        raise ApiError(404, "Station not found")
+    existing = conn.execute(
+        "SELECT r.route_id FROM routes r JOIN destinations d ON d.destination_id = r.destination_id "
+        "WHERE r.station_id = %s AND r.is_active AND lower(d.destination_name) = lower(%s) "
+        "ORDER BY r.route_id LIMIT 1",
+        (station_id, destination),
+    ).fetchone()
+    if existing:
+        return existing["route_id"]
+    dest = conn.execute(
+        "SELECT destination_id FROM destinations WHERE lower(destination_name) = lower(%s)", (destination,)
+    ).fetchone()
+    if not dest:
+        dest = conn.execute(
+            "INSERT INTO destinations (destination_name) VALUES (%s) RETURNING destination_id", (destination,)
+        ).fetchone()
+    origin = station["station_name"]
+    route_name = f"{origin} - {destination}"
+    try:
+        row = conn.execute(
+            "INSERT INTO routes (route_name, origin, destination_id, station_id) VALUES (%s, %s, %s, %s) "
+            "RETURNING route_id",
+            (route_name, origin, dest["destination_id"], station_id),
+        ).fetchone()
+    except pg.UniqueViolation:
+        # same route name already used for an inactive route or a different spelling
+        raise ApiError(409, "A route with this name already exists at this station")
+    audit(conn, staff_id, "ROUTE_CREATED", "routes", row["route_id"], {"route_name": route_name})
+    return row["route_id"]
 
 
 # ---------------------------------------------------------------- queue actions

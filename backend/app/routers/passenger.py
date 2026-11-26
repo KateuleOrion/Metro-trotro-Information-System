@@ -18,7 +18,7 @@ STATUS_LABELS = {"waiting": "Waiting in queue", "loading": "Loading"}
 def search(
     from_: str = Query("", alias="from", max_length=100),
     to: str = Query("", max_length=100),
-    conn=Depends(get_conn),
+    conn=Depends(get_conn, scope="function"),
 ):
     """Routes matching what the passenger typed, with the vehicles queued for each.
     Leave both fields empty to list every route. Missing values are returned as null so
@@ -64,7 +64,7 @@ def search(
 
 
 @router.get("/driver/vehicles")
-def driver_vehicle_list(conn=Depends(get_conn)):
+def driver_vehicle_list(conn=Depends(get_conn, scope="function")):
     """Vehicle numbers for the driver's 'select your vehicle' list (no driver names or phone numbers)."""
     return conn.execute(
         "SELECT vehicle_id, registration_number FROM vehicles WHERE vehicle_status <> 'unavailable' "
@@ -76,7 +76,7 @@ def driver_vehicle_list(conn=Depends(get_conn)):
 def driver_turn(
     vehicle_id: Optional[int] = Query(None),
     registration_number: Optional[str] = Query(None, max_length=20),
-    conn=Depends(get_conn),
+    conn=Depends(get_conn, scope="function"),
 ):
     """Tells a driver where their vehicle is in the queue and whether it is their turn to load."""
     if vehicle_id is None and not registration_number:
@@ -111,7 +111,7 @@ def driver_turn(
 
 
 @router.get("/sync/download")
-def sync_download(since: Optional[str] = Query(None), conn=Depends(get_conn)):
+def sync_download(since: Optional[str] = Query(None), conn=Depends(get_conn, scope="function")):
     """Everything the passenger app needs to keep a saved copy for offline use.
     The data set is small, so this always returns a full snapshot; `since` is accepted for
     compatibility and echoed back. Save `server_time` and show it as 'last synchronised'."""

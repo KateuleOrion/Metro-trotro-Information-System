@@ -21,7 +21,7 @@ def list_trips(
     period: Literal["all", "today", "week", "month"] = "all",
     limit: int = Query(200, ge=1, le=500),
     staff=Depends(current_staff),
-    conn=Depends(get_conn),
+    conn=Depends(get_conn, scope="function"),
 ):
     now = datetime.now(timezone.utc)
     since = {

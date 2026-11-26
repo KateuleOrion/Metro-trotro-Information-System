@@ -46,31 +46,31 @@ def queue_view(conn, station_id: int) -> dict:
 
 
 @router.get("")
-def get_queue(station_id: Optional[int] = Query(None), conn=Depends(get_conn)):
+def get_queue(station_id: Optional[int] = Query(None), conn=Depends(get_conn, scope="function")):
     return queue_view(conn, station_id or config.DEFAULT_STATION_ID)
 
 
 @router.post("/arrivals", status_code=201)
-def arrival(body: VehicleRef, staff=Depends(current_staff), conn=Depends(get_conn)):
+def arrival(body: VehicleRef, staff=Depends(current_staff), conn=Depends(get_conn, scope="function")):
     row = record_arrival(conn, staff["staff_id"], body.vehicle_id)
     return {"queue_id": row["queue_id"], "queue_position": row["queue_position"], "arrived_at": row["arrival_time"],
             "last_updated": data_last_updated(conn)}
 
 
 @router.put("/order")
-def order(body: QueueOrderIn, staff=Depends(current_staff), conn=Depends(get_conn)):
+def order(body: QueueOrderIn, staff=Depends(current_staff), conn=Depends(get_conn, scope="function")):
     reorder_queue(conn, staff["staff_id"], body.station_id or config.DEFAULT_STATION_ID, body.vehicle_ids)
     return {"ok": True, "last_updated": data_last_updated(conn)}
 
 
 @router.post("/departures", status_code=201)
-def departure(body: VehicleRef, staff=Depends(current_staff), conn=Depends(get_conn)):
+def departure(body: VehicleRef, staff=Depends(current_staff), conn=Depends(get_conn, scope="function")):
     dep = record_departure(conn, staff["staff_id"], body.vehicle_id)
     return {"departure_id": dep["departure_id"], "departed_at": dep["departure_time"],
             "last_updated": data_last_updated(conn)}
 
 
 @router.post("/cancel")
-def cancel(body: VehicleRef, staff=Depends(current_staff), conn=Depends(get_conn)):
+def cancel(body: VehicleRef, staff=Depends(current_staff), conn=Depends(get_conn, scope="function")):
     remove_from_queue(conn, staff["staff_id"], body.vehicle_id)
     return {"ok": True, "last_updated": data_last_updated(conn)}

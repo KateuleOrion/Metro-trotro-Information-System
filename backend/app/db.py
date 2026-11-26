@@ -24,5 +24,8 @@ def close_pool():
 
 
 def get_conn():
+    """Used as Depends(get_conn, scope="function"). The scope matters: it makes the commit happen
+    BEFORE the response is sent. Without it, newer FastAPI versions commit after the response, so a
+    page that reloads straight after saving something can still see the old data."""
     with pool.connection() as conn:
         yield conn

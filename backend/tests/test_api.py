@@ -86,9 +86,9 @@ def test_deactivated_staff_token_stops_working(client, staff, db):
     assert client.get("/auth/me", headers=staff).status_code == 401
 
 
-def test_only_manager_can_add_vehicles_drivers_and_routes(client, staff):
+def test_only_manager_can_add_vehicles_approve_drivers_and_add_routes(client, staff):
     assert client.post("/vehicles", headers=staff, json={"registration_number": "AB-1-24", "route_id": 1, "capacity": 14}).status_code == 403
-    assert client.post("/drivers", headers=staff, json={"driver_name": "New Driver"}).status_code == 403
+    assert client.post("/driver/requests/1/approve", headers=staff).status_code == 403
     assert client.post("/routes", headers=staff, json={"destination": "Tema"}).status_code == 403
     assert client.get("/activity", headers=staff).status_code == 403
 
@@ -374,12 +374,9 @@ def test_staff_can_assign_and_remove_a_driver(client, staff):
     assert client.put("/vehicles/3", headers=staff, json={"driver_id": 999}).status_code == 422
 
 
-def test_manager_adds_driver_and_route(client, manager):
-    d = client.post("/drivers", headers=manager, json={"driver_name": "Esi Owusu", "phone_number": "0241234567"})
-    assert d.status_code == 201
-    dup = client.post("/drivers", headers=manager, json={"driver_name": "Other", "phone_number": "0241234567"})
-    assert dup.status_code == 409
-    assert client.post("/drivers", headers=manager, json={"driver_name": "X", "phone_number": "abc"}).status_code == 422
+def test_drivers_cannot_be_added_directly_and_manager_adds_route(client, manager):
+    # New drivers only come from approved registration requests (see test_driver_requests.py).
+    assert client.post("/drivers", headers=manager, json={"driver_name": "Esi Owusu"}).status_code == 405
     r = client.post("/routes", headers=manager, json={"destination": "Tema"})
     assert r.status_code == 201 and r.json()["destination"] == "Tema"
     assert client.post("/routes", headers=manager, json={"destination": "Tema"}).status_code == 409

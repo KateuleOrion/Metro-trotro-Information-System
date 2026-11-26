@@ -9,7 +9,13 @@
 // The pages use the same data shapes in both modes:
 //   vehicle : { id, plate_number, route_id, route_name, driver_id, driver_name,
 //               seats_total, seats_available (null = unknown), status, in_queue }
-//   route   : { id, name, from, to }          driver : { id, name }
+//   route   : { id, name, from, to }          driver : { id, name, phone }
+//   driver request : { id, name, phone, plate, destination, seats, status, reason,
+//               submitted_at, reviewed_at, reviewed_by, driver_id, vehicle_id }
+//               status = pending | approved | rejected
+//   tracked vehicle : { id, plate_number, route_name, destination, destination_lat, destination_lon,
+//               lat, lon, recorded_at, stale, age_minutes, distance_km, direction, eta_minutes, speed_kmh }
+//               direction = approaching | moving_away | stopped | arrived | unknown | no_destination
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -24,20 +30,42 @@ const db = {
     { id: 3, name: "Central - Kasoa", from: "Metro Central Station", to: "Kasoa" },
   ],
   drivers: [
-    { id: 1, name: "Kwame Asare" },
-    { id: 2, name: "Kofi Mensah" },
+    { id: 1, name: "Kwame Asare", phone: "0240000001" },
+    { id: 2, name: "Kofi Mensah", phone: "0240000002" },
+  ],
+  driverRequests: [
+    { id: 1, name: "Kojo Antwi", phone: "0245550101", plate: "GW-2201-25", destination: "Madina", seats: 14,
+      status: "pending", reason: null, submitted_at: new Date(Date.now() - 3600e3).toISOString(),
+      reviewed_at: null, reviewed_by: null, driver_id: null, vehicle_id: null },
+    { id: 2, name: "Akosua Darko", phone: "0205550202", plate: null, destination: null, seats: null,
+      status: "pending", reason: null, submitted_at: new Date(Date.now() - 1200e3).toISOString(),
+      reviewed_at: null, reviewed_by: null, driver_id: null, vehicle_id: null },
   ],
   vehicles: [],
+  // map demo data: where the destinations are (null = not set yet) and where each vehicle is
+  station: { name: "Metro Central Station", lat: 5.5465, lon: -0.2063 },
+  destinationCoords: { madina: [5.6693, -0.167], circle: [5.571, -0.218], kasoa: [5.534, -0.417] },
+  positions: {}, // vehicle id -> { lat, lon, recorded_at }
   queue: [], // [{ vehicle_id, arrived_at, queue_status }]
   trips: [],
   last_updated: null,
-  nextId: 1,
+  nextId: 100, // starts high: the sample routes (1-3) and drivers (1-2) already use the small ids
 };
 const touch = () => { db.last_updated = now(); };
 const ok = (data) => new Promise((r) => setTimeout(() => r(structuredClone(data)), 150));
 const fail = (msg) => new Promise((_, rej) => setTimeout(() => rej(new Error(msg)), 150));
 const findVehicle = (id) => db.vehicles.find((v) => v.id === id);
 const entryOf = (id) => db.queue.find((q) => q.vehicle_id === id);
+const routeFor = (destination) => {
+  // the existing route to this destination, or a new one
+  const text = destination.trim();
+  let route = db.routes.find((r) => r.to.toLowerCase() === text.toLowerCase());
+  if (!route) {
+    route = { id: db.nextId++, name: `${db.station.name} - ${text}`, from: db.station.name, to: text };
+    db.routes.push(route);
+  }
+  return route.id;
+};
 const withRelations = (v) => ({
   ...v,
   route_name: db.routes.find((r) => r.id === v.route_id)?.name ?? null,
@@ -60,11 +88,16 @@ const mock = {
       return fail("A vehicle with this registration number already exists");
     if (v.seats_available != null && v.seats_available > v.seats_total)
       return fail("Seats available cannot exceed the vehicle's capacity");
+    // A typed-in destination is reused if it already exists, otherwise it is added.
+    // The driver must already be registered (approved driver request).
+    const route_id = v.route_id ?? routeFor(v.destination || "");
+    const driver_id = v.driver_id ?? null;
+    if (driver_id != null && !db.drivers.some((d) => d.id === driver_id)) return fail("Unknown route or driver");
     db.vehicles.push({
       id: db.nextId++,
       plate_number: v.plate_number.toUpperCase(),
-      route_id: v.route_id,
-      driver_id: v.driver_id ?? null,
+      route_id,
+      driver_id,
       seats_total: v.seats_total,
       seats_available: v.seats_available ?? v.seats_total,
       status: "available",
@@ -150,6 +183,125 @@ const mock = {
     return ok({ ok: true });
   },
 
+  // ---- map (demo): each vehicle starts at the station and drives toward its destination
+  getTracking: () => {
+    const toRad = (d) => (d * Math.PI) / 180;
+    const km = (a, b) => {
+      const h = Math.sin(toRad(b[0] - a[0]) / 2) ** 2 +
+        Math.cos(toRad(a[0])) * Math.cos(toRad(b[0])) * Math.sin(toRad(b[1] - a[1]) / 2) ** 2;
+      return 2 * 6371 * Math.asin(Math.sqrt(h));
+    };
+    const vehicles = [];
+    for (const v of db.vehicles) {
+      const route = db.routes.find((r) => r.id === v.route_id);
+      const dest = db.destinationCoords[(route?.to || "").toLowerCase()] || null;
+      let pos = db.positions[v.id];
+      if (!pos && dest) pos = db.positions[v.id] = { lat: db.station.lat, lon: db.station.lon, recorded_at: now() };
+      if (!pos) continue;
+      if (dest && pos.moving !== false) {
+        // move 6% of the way to the destination on every refresh
+        pos.lat += (dest[0] - pos.lat) * 0.06;
+        pos.lon += (dest[1] - pos.lon) * 0.06;
+        pos.recorded_at = now();
+      }
+      const dist = dest ? km([pos.lat, pos.lon], dest) : null;
+      vehicles.push({
+        id: v.id,
+        plate_number: v.plate_number,
+        route_name: route?.name ?? null,
+        status: v.status,
+        destination: route?.to ?? null,
+        destination_lat: dest ? dest[0] : null,
+        destination_lon: dest ? dest[1] : null,
+        lat: pos.lat,
+        lon: pos.lon,
+        recorded_at: pos.recorded_at,
+        stale: false,
+        age_minutes: 0,
+        distance_km: dist == null ? null : Math.round(dist * 100) / 100,
+        direction: dist == null ? "no_destination" : dist <= 0.2 ? "arrived" : "approaching",
+        eta_minutes: dist == null ? null : dist <= 0.2 ? 0 : Math.max(1, Math.round((dist / 30) * 60)),
+        speed_kmh: 30,
+      });
+    }
+    return ok({ vehicles, station: { ...db.station }, server_time: now() });
+  },
+  getDestinations: () =>
+    ok(
+      [...new Set(db.routes.map((r) => r.to))].map((name, i) => {
+        const c = db.destinationCoords[name.toLowerCase()];
+        return { id: i + 1, name, lat: c ? c[0] : null, lon: c ? c[1] : null };
+      })
+    ),
+  reportPosition: (vehicle_id, lat, lon) => {
+    if (!findVehicle(vehicle_id)) return fail("Vehicle not found");
+    db.positions[vehicle_id] = { lat, lon, recorded_at: now(), moving: false }; // placed by hand: stays there
+    return ok({ ok: true });
+  },
+  setDestinationLocation: (id, lat, lon) => {
+    const names = [...new Set(db.routes.map((r) => r.to))];
+    const name = names[id - 1];
+    if (!name) return fail("Destination not found");
+    db.destinationCoords[name.toLowerCase()] = [lat, lon];
+    return ok({ ok: true });
+  },
+
+  // ---- driver registration requests (demo)
+  submitDriverRequest: (r) => {
+    if (db.drivers.some((d) => d.phone === r.phone)) return fail("A driver with this phone number is already registered");
+    if (db.driverRequests.some((x) => x.phone === r.phone && x.status === "pending"))
+      return fail("You already have a request waiting for the station manager");
+    const plate = r.plate ? r.plate.toUpperCase() : null;
+    if (plate && db.vehicles.some((v) => v.plate_number === plate))
+      return fail("A vehicle with this registration number is already registered");
+    const req = {
+      id: db.nextId++, name: r.name, phone: r.phone, plate, destination: r.destination ?? null, seats: r.seats ?? null,
+      status: "pending", reason: null, submitted_at: now(), reviewed_at: null, reviewed_by: null,
+      driver_id: null, vehicle_id: null,
+    };
+    db.driverRequests.push(req);
+    return ok({ id: req.id, status: req.status });
+  },
+  getDriverRequestStatus: (phone) => {
+    const mine = db.driverRequests.filter((x) => x.phone === phone);
+    if (!mine.length) return fail("No request found for this phone number");
+    const r = mine[mine.length - 1];
+    return ok({ id: r.id, status: r.status, reason: r.reason, submitted_at: r.submitted_at, reviewed_at: r.reviewed_at });
+  },
+  getDriverRequests: (status = "pending") => {
+    const list = db.driverRequests.filter((x) => status === "all" || x.status === status);
+    return ok(status === "pending" ? list : [...list].reverse());
+  },
+  approveDriverRequest: (id) => {
+    const r = db.driverRequests.find((x) => x.id === id);
+    if (!r) return fail("Request not found");
+    if (r.status !== "pending") return fail(`This request has already been ${r.status}`);
+    if (db.drivers.some((d) => d.phone === r.phone))
+      return fail("A driver with this phone number is already registered. Reject this request instead");
+    if (r.plate && db.vehicles.some((v) => v.plate_number === r.plate))
+      return fail("A vehicle with this registration number is already registered. Reject this request instead");
+    const driver = { id: db.nextId++, name: r.name, phone: r.phone };
+    db.drivers.push(driver);
+    if (r.plate) {
+      const vehicle = {
+        id: db.nextId++, plate_number: r.plate, route_id: routeFor(r.destination), driver_id: driver.id,
+        seats_total: r.seats, seats_available: r.seats, status: "available",
+      };
+      db.vehicles.push(vehicle);
+      r.vehicle_id = vehicle.id;
+    }
+    Object.assign(r, { status: "approved", driver_id: driver.id, reviewed_at: now(), reviewed_by: "Demo Station Manager" });
+    touch();
+    return ok(r);
+  },
+  rejectDriverRequest: (id, reason) => {
+    const r = db.driverRequests.find((x) => x.id === id);
+    if (!r) return fail("Request not found");
+    if (r.status !== "pending") return fail(`This request has already been ${r.status}`);
+    Object.assign(r, { status: "rejected", reason: reason || null, reviewed_at: now(), reviewed_by: "Demo Station Manager" });
+    return ok(r);
+  },
+
   getTrips: ({ destination = "", period = "all" } = {}) => {
     const text = destination.toLowerCase();
     const days = { today: 1, week: 7, month: 30 }[period];
@@ -209,12 +361,29 @@ const toVehicle = (v) => ({
   in_queue: v.in_queue,
 });
 
+const toDriverRequest = (r) => ({
+  id: r.request_id,
+  name: r.full_name,
+  phone: r.phone_number,
+  plate: r.registration_number,
+  destination: r.destination,
+  seats: r.capacity,
+  status: r.request_status,
+  reason: r.reject_reason,
+  submitted_at: r.submitted_at,
+  reviewed_at: r.reviewed_at,
+  reviewed_by: r.reviewed_by_name,
+  driver_id: r.driver_id,
+  vehicle_id: r.vehicle_id,
+});
+
 const real = {
   login: (email, password) => request("/auth/login", { method: "POST", body: json({ email, password }) }),
 
   getRoutes: async () =>
     (await request("/routes")).map((r) => ({ id: r.route_id, name: r.route_name, from: r.origin, to: r.destination })),
-  getDrivers: async () => (await request("/drivers")).map((d) => ({ id: d.driver_id, name: d.driver_name })),
+  getDrivers: async () =>
+    (await request("/drivers")).map((d) => ({ id: d.driver_id, name: d.driver_name, phone: d.phone_number })),
 
   getVehicles: async () => {
     const r = await request("/vehicles");
@@ -225,7 +394,10 @@ const real = {
       method: "POST",
       body: json({
         registration_number: v.plate_number,
-        route_id: v.route_id,
+        // existing route by id, or a typed-in destination that the backend finds or adds;
+        // the driver must be a registered one (by id)
+        route_id: v.route_id ?? null,
+        destination: v.destination ?? null,
         capacity: v.seats_total,
         driver_id: v.driver_id ?? null,
         available_seats: v.seats_available ?? null,
@@ -260,6 +432,67 @@ const real = {
   saveQueueOrder: (ids) => request("/queue/order", { method: "PUT", body: json({ vehicle_ids: ids }) }),
   recordDeparture: (vehicle_id) => request("/queue/departures", { method: "POST", body: json({ vehicle_id }) }),
   removeFromQueue: (vehicle_id) => request("/queue/cancel", { method: "POST", body: json({ vehicle_id }) }),
+
+  getTracking: async () => {
+    const r = await request("/tracking/vehicles");
+    return {
+      vehicles: r.vehicles.map((v) => ({
+        id: v.vehicle_id,
+        plate_number: v.registration_number,
+        route_name: v.route_name,
+        status: v.vehicle_status,
+        destination: v.destination,
+        destination_lat: v.destination_latitude,
+        destination_lon: v.destination_longitude,
+        lat: v.latitude,
+        lon: v.longitude,
+        recorded_at: v.recorded_at,
+        stale: v.stale,
+        age_minutes: v.age_minutes,
+        distance_km: v.distance_km,
+        direction: v.direction,
+        eta_minutes: v.eta_minutes,
+        speed_kmh: v.speed_kmh,
+      })),
+      station: r.station && { name: r.station.station_name, lat: r.station.latitude, lon: r.station.longitude },
+      server_time: r.server_time,
+    };
+  },
+  getDestinations: async () =>
+    (await request("/tracking/destinations")).map((d) => ({
+      id: d.destination_id, name: d.destination_name, lat: d.latitude, lon: d.longitude,
+    })),
+  reportPosition: (vehicle_id, lat, lon, speed_kmh = null) =>
+    request("/tracking/position", {
+      method: "POST",
+      body: json({ vehicle_id, latitude: lat, longitude: lon, speed_kmh }),
+    }),
+  setDestinationLocation: (id, lat, lon) =>
+    request(`/tracking/destinations/${id}/location`, { method: "PUT", body: json({ latitude: lat, longitude: lon }) }),
+
+  // ---- driver registration requests
+  submitDriverRequest: async (r) => {
+    const res = await request("/driver/requests", {
+      method: "POST",
+      body: json({
+        full_name: r.name,
+        phone_number: r.phone,
+        registration_number: r.plate ?? null,
+        destination: r.destination ?? null,
+        capacity: r.seats ?? null,
+      }),
+    });
+    return { id: res.request_id, status: res.request_status };
+  },
+  getDriverRequestStatus: async (phone) => {
+    const r = await request(`/driver/requests/status?phone=${encodeURIComponent(phone)}`);
+    return { id: r.request_id, status: r.request_status, reason: r.reject_reason, submitted_at: r.submitted_at, reviewed_at: r.reviewed_at };
+  },
+  getDriverRequests: async (status = "pending") =>
+    (await request(`/driver/requests?status=${status}`)).map(toDriverRequest),
+  approveDriverRequest: async (id) => toDriverRequest(await request(`/driver/requests/${id}/approve`, { method: "POST" })),
+  rejectDriverRequest: async (id, reason) =>
+    toDriverRequest(await request(`/driver/requests/${id}/reject`, { method: "POST", body: json({ reason: reason || null }) })),
 
   getTrips: async ({ destination = "", period = "all" } = {}) => {
     const r = await request(`/trips?destination=${encodeURIComponent(destination)}&period=${period}`);

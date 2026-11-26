@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 
 from . import config, db
 from .errors import ApiError
-from .routers import activity, auth, catalog, passenger, queue, sync, trips, vehicles
+from .routers import activity, auth, catalog, driver_requests, passenger, queue, sync, tracking, trips, vehicles
 
 
 @asynccontextmanager
@@ -53,10 +53,10 @@ async def validation_handler(request: Request, exc: RequestValidationError):
 
 
 @app.get("/health", tags=["Health"])
-def health(conn=Depends(db.get_conn)):
+def health(conn=Depends(db.get_conn, scope="function")):
     conn.execute("SELECT 1")
     return {"status": "ok", "database": "ok"}
 
 
-for module in (auth, catalog, vehicles, queue, trips, passenger, sync, activity):
+for module in (auth, catalog, driver_requests, vehicles, queue, trips, passenger, sync, tracking, activity):
     app.include_router(module.router)

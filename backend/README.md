@@ -15,6 +15,12 @@ Create the database and load the schema (the database must use UTF8 encoding):
 createdb -E UTF8 -T template0 metro_trotro
 psql -d metro_trotro -f ../metro_trotro_db.sql
 ```
+**Already have a database from an older `metro_trotro_db.sql`?** It needs the tracking map's tables. Run this
+once (it keeps your data and is safe to run twice):
+```
+psql -d metro_trotro -f ../tracking_migration.sql
+psql -d metro_trotro -f ../driver_requests_migration.sql
+```
 Copy `.env.example` to `.env` and edit it (set your database password and a long random
 `JWT_SECRET`). Never commit `.env`.
 
@@ -43,8 +49,14 @@ or `../database/metro_trotro_db.sql`, or at the path in `SCHEMA_FILE`.
 |---|---|---|
 | POST /auth/login, GET /auth/me | anyone / staff | Sign in (JWT) |
 | GET /routes, POST /routes | public / manager | Routes |
-| GET /drivers, POST /drivers | staff / manager | Drivers |
-| GET /vehicles, POST /vehicles, PUT /vehicles/{id} | staff / manager / staff | Vehicles, seats, status |
+| GET /drivers | staff | Registered drivers. There is no POST: drivers are added only by approving a request |
+| POST /driver/requests, GET /driver/requests/status?phone= | public | A driver asks to be registered (`full_name`, `phone_number`, optional `registration_number` + `destination` + `capacity`) and checks the result |
+| GET /driver/requests?status=pending\|approved\|rejected\|all | manager | Driver registration requests (waiting ones oldest first) |
+| POST /driver/requests/{id}/approve, POST /driver/requests/{id}/reject | manager | Approve (creates the driver, and the vehicle if one was given) or reject (optional `reason`, shown to the driver) |
+| GET /vehicles, POST /vehicles, PUT /vehicles/{id} | staff / manager / staff | Vehicles, seats, status. `POST /vehicles` accepts a typed-in `destination` instead of `route_id` (an existing route is reused, otherwise one is added). The driver must be a registered one, given by `driver_id` |
+| GET /tracking/vehicles, GET /tracking/destinations | public | Live map data: position, distance to destination, direction (approaching / moving away / stopped / arrived), ETA |
+| POST /tracking/position | staff | Send a vehicle's position (`vehicle_id`, `latitude`, `longitude`, optional `speed_kmh`, `recorded_at`) |
+| PUT /tracking/destinations/{id}/location | manager | Set where a destination is on the map |
 | GET /queue | public | Current queue |
 | POST /queue/arrivals, PUT /queue/order, POST /queue/departures, POST /queue/cancel | staff | Manage the queue |
 | GET /trips?destination=&period=all\|today\|week\|month | staff | Departure history |
@@ -56,7 +68,38 @@ or `../database/metro_trotro_db.sql`, or at the path in `SCHEMA_FILE`.
 Every queue change is written to `audit_log`, and queue changes at one station are serialised with a
 database lock so two staff members cannot corrupt the order.
 
+## Tracking map: how it works
+- Each position report is one row in `vehicle_positions`. Vehicles with no report for 6 hours leave the map.
+- Distance is a straight line to the route's destination (the real road distance is longer).
+- Direction compares the latest position with an earlier one at least 50 m away. Within 200 m of the destination
+  counts as arrived. ETA is only given while approaching at 5 km/h or more.
+- A position older than 5 minutes is shown as "No recent signal"; no direction or ETA is claimed for it.
+- Position reports are not written to `audit_log` (they arrive every few seconds).
+
+## Before real people use it
+1. Make a real secret and put it in `.env` as `JWT_SECRET`:
+   `python -c "import secrets; print(secrets.token_urlsafe(48))"`. On the real server also set `APP_ENV=production`;
+   the server then refuses to start with a weak secret.
+2. Replace the demo passwords (demo123 / staff123) for every account:
+   `python -m scripts.set_password demo@station.com` (it asks for the new password twice).
+3. Never commit `.env`. The `.gitignore` in the main folder already ignores it.
+
+## Driver registration: how it works
+1. The driver opens the dashboard's public page `/driver-register` (no sign-in) and sends their name, phone
+   number and, optionally, their vehicle. The request is saved in `driver_requests` with status `pending`.
+2. The station manager sees it on the dashboard's **Requests** tab (with a count on the tab) and approves or rejects it.
+3. Approving creates the driver in `drivers` and, if a vehicle was given, the vehicle in `vehicles` (its route is
+   found or created from the destination). Rejecting stores the reason.
+4. The driver checks the result on the same page using their phone number.
+
+Rules: one waiting request per phone number; a phone number or registration number that is already registered is
+refused; a request can be reviewed only once. Every step is written to `audit_log`.
+
 ## Known limitations
+- The public driver request endpoint has no rate limit or CAPTCHA, so someone could send many fake requests.
+- Sending a position needs a staff sign-in. There is no separate driver login yet, so positions come from a
+  staff member's device (the dashboard's Map page can send the device's GPS location) or are placed by hand.
+- Position history is never deleted. Add a clean-up job if the table grows large.
 - The database has no fare column, so fares are not returned.
 - Only arrival time is stored; there is no estimated arrival time.
 - The login attempt limiter is kept in memory (resets when the server restarts).
