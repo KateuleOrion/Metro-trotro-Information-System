@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Driver Interface - Metro Trotro</title>
+
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Leaflet map CSS -->
+    <link rel="stylesheet"
+          href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+</head>
+
+<body>
+
+    <header>
+        <h1>Metro Trotro</h1>
+        <p>Driver Portal</p>
+    </header>
+
+    <main class="container">
+
+        <!-- HOME SECTION -->
+        <section id="homeSection" class="card">
+            <h2>Welcome, Driver!</h2>
+            <p>Choose an option to continue.</p>
+
+            <button onclick="showSection('registerSection')">
+                Register as a Driver
+            </button>
+
+            <button class="secondary"
+                    onclick="showSection('loginSection')">
+                Existing Driver Login
+            </button>
+        </section>
+
+
+        <!-- REGISTRATION SECTION -->
+        <section id="registerSection" class="card hidden">
+            <h2>Driver Registration</h2>
+
+            <form id="registerForm">
+
+                <label>Full Name</label>
+                <input type="text" id="fullName"
+                       placeholder="Enter your full name" required>
+
+                <label>Phone Number</label>
+                <input type="tel" id="phoneNumber"
+                       placeholder="Enter your phone number" required>
+
+                <label>Vehicle Registration Number</label>
+                <input type="text" id="registrationNumber"
+                       placeholder="e.g. GR 1234-24">
+
+                <label>Destination</label>
+                <input type="text" id="destination"
+                       placeholder="Enter your destination">
+
+                <label>Passenger Capacity</label>
+                <input type="number" id="capacity"
+                       placeholder="Number of passengers">
+
+                <button type="submit">Submit Registration</button>
+
+            </form>
+
+            <p id="registrationMessage"></p>
+
+            <button class="back-button"
+                    onclick="showSection('homeSection')">
+                Back
+            </button>
+        </section>
+
+
+        <!-- LOGIN / STATUS SECTION -->
+        <section id="loginSection" class="card hidden">
+            <h2>Check Application Status</h2>
+
+            <p>Enter your registered phone number.</p>
+
+            <input type="tel" id="statusPhone"
+                   placeholder="Phone Number">
+
+            <button onclick="checkApplicationStatus()">
+                Check Status
+            </button>
+
+            <div id="statusMessage"></div>
+
+            <button class="back-button"
+                    onclick="showSection('homeSection')">
+                Back
+            </button>
+        </section>
+
+
+        <!-- DRIVER DASHBOARD -->
+        <section id="dashboardSection" class="hidden">
+
+            <div class="card">
+                <h2>Driver Dashboard</h2>
+                <p id="driverWelcome">Welcome!</p>
+                <p id="vehicleDetails"></p>
+            </div>
+
+            <div class="dashboard-grid">
+
+                <div class="card">
+                    <h3>Queue Position</h3>
+                    <p id="queuePosition">--</p>
+                </div>
+
+                <div class="card">
+                    <h3>Vehicles Ahead</h3>
+                    <p id="vehiclesAhead">--</p>
+                </div>
+
+                <div class="card">
+                    <h3>Loading Status</h3>
+                    <p id="loadingStatus">Waiting for information</p>
+                </div>
+
+            </div>
+
+            <div class="card">
+                <h2>Vehicle Map</h2>
+                <p>View available vehicle locations.</p>
+                <div id="map"></div>
+            </div>
+
+            <button class="secondary" onclick="logout()">
+                Logout
+            </button>
+
+        </section>
+
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="script.js"></script>
+
+</body>
+</html>
