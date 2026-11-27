@@ -1,43 +1,45 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api";
 import LastUpdated from "../components/LastUpdated";
+import { statusLabel } from "../labels";
 
-const MAKES = ["Toyota", "Volvo", "Mercedes-Benz", "Other"];
-const STATUSES = ["Not in queue", "Waiting in queue", "Loading", "In progress", "Completed"];
-const empty = {
-  plate_number: "", make: "", driver_id: "", route_id: "", seats_total: "", seats_available: "",
-};
+const empty = { plate_number: "", driver_id: "", destination: "", seats_total: "", seats_available: "" };
+// 'Departed' is set by "Record departure" in the queue, so it is only shown when it is the current status.
+const CHOOSABLE = ["available", "queued", "loading", "unavailable"];
 
 function validate(f) {
-  if (!f.plate_number.trim()) return "Please enter the plate number";
-  if (!f.make) return "Please select the vehicle make";
-  if (!f.driver_id) return "Please select a driver";
-  if (!f.route_id) return "Please select a route";
-  if (f.seats_total === "" || f.seats_available === "")
-    return "Please enter total seats and seats available";
+  if (!f.plate_number.trim()) return "Please enter the registration number";
+  if (!f.destination.trim()) return "Please enter the destination";
+  if (f.seats_total === "") return "Please enter the total number of seats";
   const total = Number(f.seats_total);
-  const avail = Number(f.seats_available);
   if (!Number.isInteger(total) || total < 1) return "Total seats must be a whole number of at least 1";
-  if (!Number.isInteger(avail) || avail < 0) return "Seats available must be a whole number, 0 or more";
-  if (avail > total) return "Seats available cannot exceed total seats";
+  if (f.seats_available !== "") {
+    const avail = Number(f.seats_available);
+    if (!Number.isInteger(avail) || avail < 0) return "Seats available must be a whole number, 0 or more";
+    if (avail > total) return "Seats available cannot exceed total seats";
+  }
   return "";
 }
 
-export default function Vehicles() {
+export default function Vehicles({ user }) {
   const [vehicles, setVehicles] = useState([]);
   const [routes, setRoutes] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [form, setForm] = useState(empty);
+  const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const isManager = user?.role === "station_manager";
 
   async function load() {
     try {
-      const v = await api.getVehicles();
+      const [v, r, d] = await Promise.all([api.getVehicles(), api.getRoutes(), api.getDrivers()]);
       setVehicles(v.vehicles);
       setLastUpdated(v.last_updated);
-      setRoutes(await api.getRoutes());
-      setDrivers(await api.getDrivers());
+      setRoutes(r);
+      setDrivers(d);
     } catch (err) {
       setError(err.message);
     }
@@ -59,19 +61,19 @@ export default function Vehicles() {
     try {
       await api.addVehicle({
         plate_number: form.plate_number.trim(),
-        make: form.make,
-        driver_id: Number(form.driver_id),
-        route_id: Number(form.route_id),
+        driver_id: form.driver_id ? Number(form.driver_id) : null, // only registered (approved) drivers
+        destination: form.destination.trim(), // the backend uses the existing route or adds a new one
         seats_total: Number(form.seats_total),
-        seats_available: Number(form.seats_available),
-        status: "Not in queue",
+        seats_available: form.seats_available === "" ? null : Number(form.seats_available),
       });
+      setNotice(`${form.plate_number.trim().toUpperCase()} added`);
       setForm(empty);
+      setShowForm(false);
       setError("");
-      load();
     } catch (err) {
       setError(err.message);
     }
+    load();
   }
 
   async function change(id, changes) {
@@ -81,111 +83,115 @@ export default function Vehicles() {
     } catch (err) {
       setError(err.message);
     }
-    load();
+    load(); // reload either way, so a rejected change is shown as it really is
   }
-
-  const routeName = (id) => {
-    const r = routes.find((x) => x.id === id);
-    return r ? `${r.from} - ${r.to}` : "Unavailable";
-  };
-  const driverName = (id) => {
-    const d = drivers.find((x) => x.id === id);
-    return d ? d.name : "Unavailable";
-  };
 
   return (
     <>
-      <h1>Vehicles</h1>
       {error && <p className="error" role="alert">{error}</p>}
+      {notice && !error && <p className="notice" role="status">{notice}</p>}
 
-      <div className="card">
-        <h2>Add a vehicle</h2>
-        <form className="row" onSubmit={handleAdd}>
-          <label>
-            Plate number
-            <input value={form.plate_number} onChange={set("plate_number")} placeholder="e.g. GR 1234-24" />
-          </label>
-          <label>
-            Make
-            <select value={form.make} onChange={set("make")}>
-              <option value="">Select make</option>
-              {MAKES.map((m) => <option key={m}>{m}</option>)}
-            </select>
-          </label>
-          <label>
-            Driver
-            <select value={form.driver_id} onChange={set("driver_id")}>
-              <option value="">Select driver</option>
-              {drivers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          </label>
-          <label>
-            Route
-            <select value={form.route_id} onChange={set("route_id")}>
-              <option value="">Select route</option>
-              {routes.map((r) => <option key={r.id} value={r.id}>{r.from} - {r.to}</option>)}
-            </select>
-          </label>
-          <label>
-            Total seats
-            <input type="number" min="1" value={form.seats_total} onChange={set("seats_total")} />
-          </label>
-          <label>
-            Seats available
-            <input type="number" min="0" value={form.seats_available} onChange={set("seats_available")} />
-          </label>
-          <button type="submit">Add vehicle</button>
-        </form>
-      </div>
+      {isManager && !showForm && (
+        <button style={{ marginBottom: 14 }} onClick={() => { setShowForm(true); setNotice(""); }}>
+          + Add a vehicle
+        </button>
+      )}
 
-      <div className="card">
-        {vehicles.length === 0 ? (
-          <p className="muted">No vehicles added yet</p>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Plate</th><th>Make</th><th>Driver</th><th>Route</th><th>Seats available</th><th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {vehicles.map((v) => (
-                <tr key={v.id}>
-                  <td>{v.plate_number}</td>
-                  <td>{v.make}</td>
-                  <td>{driverName(v.driver_id)}</td>
-                  <td>{routeName(v.route_id)}</td>
-                  <td>
-                    <input
-                      type="number"
-                      min="0"
-                      max={v.seats_total}
-                      style={{ width: 80 }}
-                      aria-label={`Seats available for ${v.plate_number}`}
-                      key={`${v.id}-${v.seats_available}`}
-                      defaultValue={v.seats_available}
-                      onBlur={(e) =>
-                        Number(e.target.value) !== v.seats_available &&
-                        change(v.id, { seats_available: Number(e.target.value) })
-                      }
-                    />
-                    <span className="muted"> of {v.seats_total}</span>
-                  </td>
-                  <td>
+      {isManager && showForm && (
+        <div className="card">
+          <h2>Add a vehicle</h2>
+          <form className="stack" onSubmit={handleAdd}>
+            <label>
+              Registration number
+              <input value={form.plate_number} onChange={set("plate_number")} placeholder="e.g. GR-1234-24"
+                autoCapitalize="characters" />
+            </label>
+            <label>
+              Driver
+              <select value={form.driver_id} onChange={set("driver_id")}>
+                <option value="">No driver yet</option>
+                {drivers.map((d) => <option key={d.id} value={d.id}>{d.name}{d.phone ? ` (${d.phone})` : ""}</option>)}
+              </select>
+              <span className="hint">
+                Only registered drivers are listed. New drivers send a request, which you approve
+                under <Link to="/requests">Requests</Link>.
+              </span>
+            </label>
+            <label>
+              Destination
+              <input list="destination-names" value={form.destination} onChange={set("destination")}
+                placeholder="e.g. Madina" autoComplete="off" />
+              <datalist id="destination-names">
+                {[...new Set(routes.map((r) => r.to))].map((name) => <option key={name} value={name} />)}
+              </datalist>
+            </label>
+            <div className="two">
+              <label>
+                Total seats
+                <input type="number" inputMode="numeric" min="1" value={form.seats_total} onChange={set("seats_total")} />
+              </label>
+              <label>
+                Seats free
+                <input type="number" inputMode="numeric" min="0" value={form.seats_available}
+                  onChange={set("seats_available")} placeholder="All" />
+              </label>
+            </div>
+            <div className="actions">
+              <button type="button" className="secondary" onClick={() => { setShowForm(false); setError(""); }}>Cancel</button>
+              <button type="submit">Add vehicle</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {vehicles.length === 0 ? (
+        <p className="empty">No vehicles added yet</p>
+      ) : (
+        <div className="list">
+          {vehicles.map((v) => {
+            const seats = v.seats_available;
+            return (
+              <div className="item" key={v.id}>
+                <div className="item-head">
+                  <span className="item-title">{v.plate_number}</span>
+                  <span className={`chip ${v.status}`}>{statusLabel(v.status)}</span>
+                </div>
+                <dl className="facts">
+                  <dt>Driver</dt><dd>{v.driver_name ?? "No driver"}</dd>
+                  <dt>Route</dt><dd>{v.route_name ?? "Unavailable"}</dd>
+                </dl>
+
+                <div className="stack" style={{ marginTop: 12 }}>
+                  <div>
+                    <div className="hint" style={{ marginBottom: 5 }}>Seats free</div>
+                    <div className="stepper">
+                      <button className="secondary" aria-label={`One fewer seat free in ${v.plate_number}`}
+                        disabled={seats == null || seats <= 0}
+                        onClick={() => change(v.id, { seats_available: seats - 1 })}>−</button>
+                      <span className="value">{seats ?? "?"} <small>of {v.seats_total}</small></span>
+                      <button className="secondary" aria-label={`One more seat free in ${v.plate_number}`}
+                        disabled={seats != null && seats >= v.seats_total}
+                        onClick={() => change(v.id, { seats_available: seats == null ? v.seats_total : seats + 1 })}>+</button>
+                    </div>
+                  </div>
+                  <label>
+                    Status
                     <select
                       value={v.status}
                       aria-label={`Status for ${v.plate_number}`}
                       onChange={(e) => change(v.id, { status: e.target.value })}
                     >
-                      {STATUSES.map((s) => <option key={s}>{s}</option>)}
+                      {(CHOOSABLE.includes(v.status) ? CHOOSABLE : [v.status, ...CHOOSABLE]).map((s) => (
+                        <option key={s} value={s}>{statusLabel(s)}</option>
+                      ))}
                     </select>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+                  </label>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
       <LastUpdated value={lastUpdated} />
     </>
   );
