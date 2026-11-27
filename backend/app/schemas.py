@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 VehicleStatus = Literal["available", "queued", "loading", "departed", "unavailable"]
 
@@ -12,9 +12,54 @@ class Base(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
 
+
 class LoginIn(Base):
-    email: str = Field(min_length=3, max_length=255)
+    """Sign in using a phone number or email, plus a password."""
+
+    email: Optional[str] = Field(
+        default=None,
+        min_length=3,
+        max_length=255
+    )
+
+    phone: Optional[str] = Field(
+        default=None,
+        min_length=7,
+        max_length=20
+    )
+
+    password: str = Field(
+        min_length=1,
+        max_length=72
+    )
+
+    role: Optional[
+        Literal["driver", "mate", "commuter", "station_manager"]
+    ] = None
+
+    @model_validator(mode="after")
+    def _need_phone_or_email(self):
+        if not self.email and not self.phone:
+            raise ValueError("Enter a phone number or an email")
+        return self
+
+
+class PassengerRegisterIn(Base):
+    full_name: str = Field(min_length=2, max_length=150)
+
+    phone_number: str = Field(
+        min_length=7,
+        max_length=20,
+        pattern=r"^[0-9+ ]+$"
+    )
+
+    password: str = Field(min_length=8, max_length=72)
+
+
+class PassengerLoginIn(Base):
+    phone_number: str = Field(min_length=7, max_length=20)
     password: str = Field(min_length=1, max_length=72)
+
 
 
 class VehicleCreate(Base):
@@ -34,6 +79,19 @@ class VehicleUpdate(Base):
 
 class VehicleRef(Base):
     vehicle_id: int
+
+
+class PositionIn(Base):
+    vehicle_id: int
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    speed_kmh: Optional[float] = Field(default=None, ge=0)
+    recorded_at: Optional[datetime] = None
+
+
+class LocationIn(Base):
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
 
 
 class QueueOrderIn(Base):
@@ -65,3 +123,7 @@ class SyncRecord(Base):
 class SyncBatchIn(Base):
     device_id: str = Field(min_length=1, max_length=100)
     records: list[dict] = Field(max_length=500)
+
+class BookingCreate(Base):
+    vehicle_id: int = Field(gt=0)
+    seats_booked: int = Field(default=1, ge=1, le=100)

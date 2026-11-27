@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'screens/home_screen.dart';
+import 'screens/role_selection_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,6 +18,6 @@ class PassengerApp extends StatelessWidget {
           colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF174EA6)),
           fontFamily: 'Roboto',
         ),
-        home: const HomeScreen(),
+        home: const RoleSelectionScreen(),
       );
 }

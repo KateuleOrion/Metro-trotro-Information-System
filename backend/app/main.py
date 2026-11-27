@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 
 from . import config, db
 from .errors import ApiError
-from .routers import activity, auth, catalog, passenger, queue, sync, trips, vehicles
+from .routers import activity, auth, catalog, passenger, queue, sync, trips, vehicles, tracking
 
 
 @asynccontextmanager
@@ -58,5 +58,5 @@ def health(conn=Depends(db.get_conn)):
     return {"status": "ok", "database": "ok"}
 
 
-for module in (auth, catalog, vehicles, queue, trips, passenger, sync, activity):
+for module in (auth, catalog, vehicles, queue, trips, passenger, sync, activity, tracking):
     app.include_router(module.router)

@@ -8,6 +8,9 @@ from ..db import get_conn
 from ..errors import ApiError
 from ..services import ACTIVE_SQL, LATEST_SEATS_JOIN, data_last_updated, estimate_wait_minutes
 from .trips import _like
+from ..booking_service import create_booking, cancel_booking
+from ..schemas import BookingCreate
+from ..security import current_passenger
 
 router = APIRouter(tags=["Passenger and driver"])
 
@@ -140,3 +143,59 @@ def sync_download(since: Optional[str] = Query(None), conn=Depends(get_conn)):
         "departures": departures,
         "last_updated": view["last_updated"],
     }
+
+@router.post("/passenger/bookings", status_code=201)
+def book_seats(
+    body: BookingCreate,
+    passenger=Depends(current_passenger),
+    conn=Depends(get_conn)
+):
+    """Allow an authenticated commuter to reserve seats."""
+
+    return create_booking(
+        conn,
+        passenger["passenger_subject"],
+        body.vehicle_id,
+        body.seats_booked
+    )
+
+@router.get("/passenger/bookings")
+def get_my_bookings(
+    passenger=Depends(current_passenger),
+    conn=Depends(get_conn)
+):
+    """Return bookings belonging to the signed-in commuter."""
+
+    rows = conn.execute(
+        """
+        SELECT
+            b.booking_reference,
+            b.vehicle_id,
+            v.registration_number,
+            b.seats_booked,
+            b.booking_status,
+            b.booking_time,
+            b.cancelled_at
+        FROM bookings b
+        JOIN vehicles v ON v.vehicle_id = b.vehicle_id
+        WHERE b.passenger_subject = %s
+        ORDER BY b.booking_time DESC
+        """,
+        (passenger["passenger_subject"],)
+    ).fetchall()
+
+    return {"bookings": rows}
+
+@router.delete("/passenger/bookings/{booking_reference}")
+def cancel_my_booking(
+    booking_reference: str,
+    passenger=Depends(current_passenger),
+    conn=Depends(get_conn)
+):
+    """Allow a commuter to cancel their own booking."""
+
+    return cancel_booking(
+        conn,
+        passenger["passenger_subject"],
+        booking_reference
+    )
