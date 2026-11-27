@@ -131,3 +131,47 @@ def test_approval_is_refused_if_plate_was_taken_meanwhile(client, manager, db):
     assert r.status_code == 409 and "Reject this request" in r.json()["detail"]
     assert count(db, "drivers") == 3                       # nothing half-saved
     assert db.execute("SELECT request_status FROM driver_requests WHERE request_id = 1").fetchone()["request_status"] == "pending"
+
+
+# ------------------------------------------------------------------ driver app: login with phone number only
+def test_existing_driver_logs_in_with_phone_only(client):
+    r = client.post("/driver/login", json={"phone_number": "0240000001"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["full_name"] == "Kwame Asare" and body["driver_id"] == 1
+    assert [v["registration_number"] for v in body["vehicles"]] == ["GT-1234-24"]
+    assert body["vehicles"][0]["destination"] == "Madina"
+
+
+def test_driver_login_accepts_phone_written_differently(client):
+    assert client.post("/driver/login", json={"phone_number": "+233 24 000 0001"}).status_code == 200
+
+
+def test_unknown_phone_is_told_to_sign_up(client):
+    r = client.post("/driver/login", json={"phone_number": "0277770001"})
+    assert r.status_code == 404 and "Please sign up" in r.json()["detail"]
+    assert client.post("/driver/login", json={"phone_number": "abc"}).status_code == 422
+
+
+def test_waiting_driver_cannot_log_in_yet(client):
+    r = client.post("/driver/login", json={"phone_number": "0245550101"})  # sample request 1, pending
+    assert r.status_code == 403 and "waiting" in r.json()["detail"]
+
+
+def test_driver_logs_in_after_approval(client, manager):
+    client.post("/driver/requests/1/approve", headers=manager)
+    r = client.post("/driver/login", json={"phone_number": "0245550101"})
+    assert r.status_code == 200 and r.json()["vehicles"][0]["registration_number"] == "GW-2201-25"
+
+
+def test_rejected_driver_sees_reason(client, manager):
+    client.post("/driver/requests/2/reject", headers=manager, json={"reason": "Bring your licence"})
+    r = client.post("/driver/login", json={"phone_number": "0205550202"})
+    assert r.status_code == 403 and "Bring your licence" in r.json()["detail"]
+
+
+def test_signup_with_plus233_then_login_with_local_number(client, manager):
+    rid = client.post("/driver/requests", json={"full_name": "Efua Sarpong", "phone_number": "+233 27 777 0001"}).json()["request_id"]
+    assert client.get("/driver/requests/status", params={"phone": "0277770001"}).json()["request_id"] == rid
+    client.post(f"/driver/requests/{rid}/approve", headers=manager)
+    assert client.post("/driver/login", json={"phone_number": "0277770001"}).json()["full_name"] == "Efua Sarpong"

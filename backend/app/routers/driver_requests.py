@@ -14,7 +14,7 @@ from ..db import get_conn
 from ..errors import ApiError
 from ..schemas import DriverRequestIn, RejectIn
 from ..security import require_manager
-from ..services import audit, find_or_create_route, set_seats
+from ..services import audit, find_or_create_route, normalize_phone, set_seats
 
 router = APIRouter(prefix="/driver/requests", tags=["Driver registration requests"])
 
@@ -40,11 +40,12 @@ def _phone_registered(conn, phone: str) -> bool:
 # ---------------------------------------------------------------- driver side (public)
 @router.post("", status_code=201)
 def submit_request(body: DriverRequestIn, conn=Depends(get_conn, scope="function")):
-    """A driver asks to be registered at the station."""
-    if _phone_registered(conn, body.phone_number):
+    """A driver asks to be registered at the station (sign up in the driver app)."""
+    phone = normalize_phone(body.phone_number)  # '+233 24 123 4567' and '0241234567' are one number
+    if _phone_registered(conn, phone):
         raise ApiError(409, "A driver with this phone number is already registered")
     if conn.execute(
-        "SELECT 1 FROM driver_requests WHERE phone_number = %s AND request_status = 'pending'", (body.phone_number,)
+        "SELECT 1 FROM driver_requests WHERE phone_number = %s AND request_status = 'pending'", (phone,)
     ).fetchone():
         raise ApiError(409, "You already have a request waiting for the station manager")
     plate = body.registration_number.upper() if body.registration_number else None
@@ -54,7 +55,7 @@ def submit_request(body: DriverRequestIn, conn=Depends(get_conn, scope="function
         row = conn.execute(
             "INSERT INTO driver_requests (full_name, phone_number, registration_number, destination, capacity, station_id) "
             "VALUES (%s, %s, %s, %s, %s, %s) RETURNING request_id, request_status, submitted_at",
-            (body.full_name, body.phone_number, plate, body.destination, body.capacity, config.DEFAULT_STATION_ID),
+            (body.full_name, phone, plate, body.destination, body.capacity, config.DEFAULT_STATION_ID),
         ).fetchone()
     except pg.UniqueViolation:  # two requests sent at the same moment
         raise ApiError(409, "You already have a request waiting for the station manager")
@@ -68,7 +69,7 @@ def request_status(phone: str = Query(min_length=7, max_length=20), conn=Depends
     row = conn.execute(
         "SELECT request_id, request_status, reject_reason, submitted_at, reviewed_at "
         "FROM driver_requests WHERE phone_number = %s ORDER BY submitted_at DESC, request_id DESC LIMIT 1",
-        (phone.strip(),),
+        (normalize_phone(phone),),
     ).fetchone()
     if not row:
         raise ApiError(404, "No request found for this phone number")

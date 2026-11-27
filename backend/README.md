@@ -55,6 +55,7 @@ or `../database/metro_trotro_db.sql`, or at the path in `SCHEMA_FILE`.
 | GET /routes, POST /routes | public / manager | Routes |
 | GET /drivers | staff | Registered drivers. There is no POST: drivers are added only by approving a request |
 | POST /driver/requests, GET /driver/requests/status?phone= | public | A driver asks to be registered (`full_name`, `phone_number`, optional `registration_number` + `destination` + `capacity`) and checks the result |
+| POST /driver/login | public | Driver app login with only `{"phone_number"}`. Returns the driver and their vehicles; 403 if the request is waiting or was rejected; 404 if not registered (sign up instead) |
 | GET /driver/requests?status=pending\|approved\|rejected\|all | manager | Driver registration requests (waiting ones oldest first) |
 | POST /driver/requests/{id}/approve, POST /driver/requests/{id}/reject | manager | Approve (creates the driver, and the vehicle if one was given) or reject (optional `reason`, shown to the driver) |
 | GET /vehicles, POST /vehicles, PUT /vehicles/{id} | staff / manager / staff | Vehicles, seats, status. `POST /vehicles` accepts a typed-in `destination` instead of `route_id` (an existing route is reused, otherwise one is added). The driver must be a registered one, given by `driver_id` |

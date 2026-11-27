@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 
 from . import config, db
 from .errors import ApiError
-from .routers import (activity, auth, catalog, driver_requests, passenger, queue, staff_accounts, sync, tracking,
+from .routers import (activity, auth, catalog, driver_login, driver_requests, passenger, queue, staff_accounts, sync, tracking,
                       trips, vehicles)
 
 
@@ -59,5 +59,5 @@ def health(conn=Depends(db.get_conn, scope="function")):
     return {"status": "ok", "database": "ok"}
 
 
-for module in (auth, staff_accounts, catalog, driver_requests, vehicles, queue, trips, passenger, sync, tracking, activity):
+for module in (auth, staff_accounts, catalog, driver_requests, driver_login, vehicles, queue, trips, passenger, sync, tracking, activity):
     app.include_router(module.router)
