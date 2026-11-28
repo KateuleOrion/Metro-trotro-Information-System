@@ -5,8 +5,8 @@ import { api, isDemoMode } from "../api";
 // Log in or register as station staff or a station manager. (Mates use their own app.)
 // Accounts use a phone number, or an email instead. Logging in uses whichever one was registered.
 const ROLES = {
-  staff: { role: "station_staff", title: "Station staff", demo: "0200000002 / staff123" },
-  manager: { role: "station_manager", title: "Station manager", demo: "0200000001 / demo123" },
+  staff: { role: "station_staff", title: "Station staff", demo: { phone: "0200000002", password: "staff123" } },
+  manager: { role: "station_manager", title: "Station manager", demo: { phone: "0200000001", password: "demo123" } },
 };
 const PHONE = /^\+?[0-9][0-9 -]{6,19}$/;
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -134,7 +134,15 @@ export default function Login({ onLogin }) {
             </label>
             {error && <p className="error" role="alert">{error}</p>}
             <button type="submit" disabled={busy}>{busy ? "Logging in..." : "Log in"}</button>
-            <p className="muted center hint">Demo: {role.demo}{isDemoMode ? " (demo mode)" : ""}</p>
+            <p className="muted center hint">
+              Demo: {role.demo.phone} / {role.demo.password}{isDemoMode ? " (demo mode)" : ""}{" "}
+              <button type="button" className="link" onClick={() => {
+                setUseEmail(false);
+                setLoginId(role.demo.phone);
+                setPassword(role.demo.password);
+                setError("");
+              }}>Fill in</button>
+            </p>
           </form>
         ) : (
           <form className="stack" onSubmit={handleRegister}>

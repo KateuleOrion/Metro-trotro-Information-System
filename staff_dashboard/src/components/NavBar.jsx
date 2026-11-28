@@ -52,8 +52,10 @@ export default function NavBar({ user, onLogout }) {
   return (
     <>
       <header className="topbar">
-        <span className="title">{TITLES[pathname] ?? "Station information"}</span>
-        <span className="who">{user.name}</span>
+        <span className="heading">
+          <span className="title">{TITLES[pathname] ?? "Station information"}</span>
+          <span className="who">{user.name}</span>
+        </span>
         <button onClick={onLogout}>Sign out</button>
       </header>
       <nav className="tabbar" aria-label="Main">

@@ -1,5 +1,6 @@
-/* Phone-first layout. Everything is designed for a ~360-430px wide phone screen first;
-   wider screens only get more room (see the @media rule at the end). */
+/* Mobile app layout. The app is always a phone-sized screen: on a phone it fills the screen,
+   and on a laptop or tablet it is shown inside a phone frame (see "phone frame" at the end).
+   The top bar and the bottom tab bar stay in place; only the content between them scrolls. */
 
 :root {
     --green: #1B6B45;
@@ -44,10 +45,30 @@ h2 {
 }
 
 /* ---------- page frame ---------- */
+html,
+body {
+    height: 100%;
+}
+
+/* The app "screen": a column with top bar, scrolling content, tab bar. */
+#root {
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg);
+    position: relative;
+}
+
 .page {
-    max-width: 640px;
-    margin: 0 auto;
-    padding: 14px 14px calc(var(--tabbar-h) + var(--safe-bottom) + 20px);
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    order: 2;
+    padding: 14px 14px 24px;
 }
 
 .page.public {
@@ -55,8 +76,8 @@ h2 {
 }
 
 .topbar {
-    position: sticky;
-    top: 0;
+    order: 1;
+    flex: none;
     z-index: 20;
     background: var(--green);
     color: #fff;
@@ -67,10 +88,16 @@ h2 {
     padding-top: calc(10px + env(safe-area-inset-top, 0px));
 }
 
+.topbar .heading {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
 .topbar .title {
     font-weight: 700;
-    font-size: 17px;
-    flex: 1;
+    font-size: 18px;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -80,7 +107,6 @@ h2 {
 .topbar .who {
     font-size: 13px;
     opacity: 0.9;
-    max-width: 40vw;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -99,10 +125,8 @@ h2 {
 
 /* ---------- bottom tab bar ---------- */
 .tabbar {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    order: 3;
+    flex: none;
     z-index: 30;
     background: #fff;
     border-top: 1px solid var(--border);
@@ -639,14 +663,50 @@ a {
 }
 
 /* ---------- wider screens (tablet / laptop): same design, a little more room ---------- */
-@media (min-width: 768px) {
-    .page {
-        padding-left: 20px;
-        padding-right: 20px;
+/* ---------- phone frame: on laptops and tablets, show the app as a phone ---------- */
+@media (min-width: 600px) {
+    body {
+        background: radial-gradient(circle at 50% 30%, #E7ECE8, #C9D2CC);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        overflow: hidden;
     }
 
-    h1 {
-        font-size: 26px;
+    #root {
+        width: 390px;
+        height: min(844px, calc(100vh - 40px));
+        border: 12px solid #111;
+        border-radius: 46px;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28), 0 0 0 2px #333;
+    }
+
+    /* the camera notch */
+    #root::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 120px;
+        height: 22px;
+        background: #111;
+        border-radius: 0 0 14px 14px;
+        z-index: 50;
+    }
+
+    .topbar {
+        padding-top: 28px; /* room for the notch */
+    }
+
+    .page.public {
+        padding-top: 30px;
+    }
+
+    /* thin scrollbar inside the phone */
+    .page::-webkit-scrollbar {
+        width: 0;
     }
 }
 
