@@ -2,12 +2,12 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 
 // The first screen everyone sees: choose who you are, then log in or register.
-// Passengers and mates use their own phone apps, so their cards only say where to go.
+// Passengers use their own phone app, so their card only says where to go.
 const ROLES = [
   { key: "passenger", title: "Passenger",
     note: "Passengers do not need an account. Open the Metro Trotro passenger app to search for a vehicle to your destination and see how many seats are free." },
   { key: "driver", title: "Driver", to: "/driver-register" },
-  { key: "mate", title: "Mate", note: "Please use the Metro Trotro mate app." },
+  { key: "mate", title: "Mate", to: "/account/mate" },
   { key: "staff", title: "Station staff", to: "/account/staff" },
   { key: "manager", title: "Station manager", to: "/account/manager" },
 ];

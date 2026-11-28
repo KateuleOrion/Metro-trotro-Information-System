@@ -7,12 +7,14 @@ import Queue from "./pages/Queue";
 import Vehicles from "./pages/Vehicles";
 import Trips from "./pages/Trips";
 import MapPage from "./pages/Map";
+import Mate from "./pages/Mate";
 import Requests from "./pages/Requests";
 import DriverRegister from "./pages/DriverRegister";
 
 export default function App() {
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem("user") || "null"));
   const isManager = user?.role === "station_manager";
+  const isMate = user?.role === "mate";
 
   function handleLogin(u) {
     localStorage.setItem("user", JSON.stringify(u));
@@ -32,7 +34,23 @@ export default function App() {
         {/* Public page: a driver asks to be registered. No sign-in needed. */}
         <Route path="/driver-register" element={<DriverRegister />} />
 
-        {!user ? (
+        {user && isMate ? (
+          // The mate's own app: only the seat booking screen, no staff tabs.
+          <Route
+            path="*"
+            element={
+              <>
+                <NavBar user={user} onLogout={handleLogout} />
+                <main className="page">
+                  <Routes>
+                    <Route path="/mate" element={<Mate />} />
+                    <Route path="*" element={<Navigate to="/mate" />} />
+                  </Routes>
+                </main>
+              </>
+            }
+          />
+        ) : !user ? (
           <>
             {/* Everyone starts here: choose Passenger, Driver, Mate, Station staff or Station manager. */}
             <Route path="/" element={<RoleChoice />} />

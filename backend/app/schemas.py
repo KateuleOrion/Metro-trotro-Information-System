@@ -31,10 +31,10 @@ EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
 
 
 class RegisterIn(Base):
-    """A new station staff or station manager account. Give a phone number, or an
+    """A new station staff, station manager or mate (conductor) account. Give a phone number, or an
     email instead; at least one is needed."""
     full_name: str = Field(min_length=2, max_length=100)
-    role: Literal["station_staff", "station_manager"]
+    role: Literal["station_staff", "station_manager", "mate"]
     phone_number: Optional[str] = Field(default=None, pattern=PHONE_PATTERN)
     email: Optional[str] = Field(default=None, max_length=255, pattern=EMAIL_PATTERN)
     password: str = Field(min_length=8, max_length=72)
@@ -75,6 +75,11 @@ class VehicleUpdate(Base):
     driver_id: Optional[int] = None
     route_id: Optional[int] = None
     available_seats: Optional[int] = Field(default=None, ge=0)
+
+
+class SeatChange(Base):
+    """How many passengers a mate is booking onto, or taking off, a vehicle."""
+    count: int = Field(default=1, ge=1, le=100)
 
 
 class VehicleRef(Base):

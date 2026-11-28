@@ -59,7 +59,7 @@ CREATE TABLE staff (
     phone_number     VARCHAR(20) UNIQUE,
     password_hash    VARCHAR(255) NOT NULL,
     role             VARCHAR(30) NOT NULL
-                         CHECK (role IN ('station_manager', 'station_staff')),
+                         CHECK (role IN ('station_manager', 'station_staff', 'mate')),
     account_status   VARCHAR(20) NOT NULL DEFAULT 'active'
                          CHECK (account_status IN ('pending', 'active', 'inactive', 'locked', 'rejected')),
     reject_reason    VARCHAR(255),
@@ -254,7 +254,10 @@ VALUES
  'staff123', 'station_staff', 'active'),
 -- A station staff member who registered and is waiting for the station manager's approval.
 (3, 'Kwesi Owusu', NULL, NULL, '0200000003',
- 'staff456', 'station_staff', 'pending');
+ 'staff456', 'station_staff', 'pending'),
+-- A mate (conductor). Mates use their own app: they can only book and cancel seats.
+(4, 'Kofi Boateng', NULL, NULL, '0200000004',
+ 'mate123', 'mate', 'active');
 
 INSERT INTO drivers (driver_id, driver_name, phone_number) VALUES
 (1, 'Kwame Asare', '0240000001'),

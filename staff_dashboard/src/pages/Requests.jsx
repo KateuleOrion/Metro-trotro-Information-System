@@ -278,7 +278,7 @@ export default function Requests() {
         <button role="tab" aria-selected={kind === "drivers"} className={kind === "drivers" ? "on" : ""}
           onClick={() => setKind("drivers")}>{label("Drivers", counts.drivers)}</button>
         <button role="tab" aria-selected={kind === "staff"} className={kind === "staff" ? "on" : ""}
-          onClick={() => setKind("staff")}>{label("Staff accounts", counts.staff)}</button>
+          onClick={() => setKind("staff")}>{label("Accounts", counts.staff)}</button>
       </div>
       {kind === "drivers" ? <DriverRequests /> : <StaffAccounts />}
     </>

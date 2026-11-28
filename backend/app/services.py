@@ -246,6 +246,36 @@ def vehicle_rows(conn, vehicle_id: Optional[int] = None) -> list[dict]:
     return conn.execute(VEHICLE_ROWS_SQL + " WHERE v.vehicle_id = %s", (vehicle_id,)).fetchall()
 
 
+def change_seats(conn, staff_id: int, vehicle_id: int, delta: int) -> None:
+    """Book (delta < 0) or release (delta > 0) seats on a vehicle (mate / conductor page).
+
+    The vehicle row is locked first, so if two mates book at the same moment the second one
+    sees the seats left by the first and cannot push the count below 0."""
+    v = get_vehicle(conn, vehicle_id, lock=True)
+    if v["vehicle_status"] == "unavailable":
+        raise ApiError(409, "This vehicle is marked unavailable")
+    if v["vehicle_status"] == "departed":
+        raise ApiError(409, "This vehicle has already departed")
+    row = conn.execute(
+        "SELECT available_seats FROM seat_availability WHERE vehicle_id = %s "
+        "ORDER BY last_updated DESC, seat_record_id DESC LIMIT 1",
+        (vehicle_id,),
+    ).fetchone()
+    if row is None:
+        raise ApiError(409, "Seats have not been set for this vehicle yet. Ask the station staff to set them")
+    left, capacity = row["available_seats"], v["capacity"]
+    if delta < 0 and left == 0:
+        raise ApiError(409, "The vehicle is full. No seats left to book")
+    if delta < 0 and -delta > left:
+        raise ApiError(409, f"Only {left} seat{'s' if left != 1 else ''} left. Cannot book {-delta} passengers")
+    if delta > 0 and left + delta > capacity:
+        booked = capacity - left
+        raise ApiError(409, f"Only {booked} passenger{'s are' if booked != 1 else ' is'} booked. Cannot cancel {delta}")
+    set_seats(conn, staff_id, vehicle_id, capacity, left + delta)
+    audit(conn, staff_id, "SEATS_BOOKED" if delta < 0 else "SEATS_RELEASED", "vehicles", vehicle_id,
+          {"count": abs(delta), "seats_before": left, "seats_after": left + delta})
+
+
 def set_seats(conn, staff_id: int, vehicle_id: int, capacity: int, seats: int) -> None:
     if seats > capacity:
         raise ApiError(422, f"Seats available cannot exceed the vehicle's capacity ({capacity})")

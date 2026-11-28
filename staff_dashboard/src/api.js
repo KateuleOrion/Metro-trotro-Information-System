@@ -38,6 +38,8 @@ const db = {
       role: "station_staff", status: "active", created_at: now() },
     { id: 3, name: "Kwesi Owusu", phone: "0200000003", email: null, password: "staff456",
       role: "station_staff", status: "pending", created_at: now() },
+    { id: 4, name: "Kofi Boateng", phone: "0200000004", email: null, password: "mate123",
+      role: "mate", status: "active", created_at: now() },
   ],
   routes: [
     { id: 1, name: "Central - Madina", from: "Metro Central Station", to: "Madina" },
@@ -96,6 +98,26 @@ const withRelations = (v) => ({
   in_queue: !!entryOf(v.id),
 });
 
+function mockChangeSeats(id, delta) {
+  const v = findVehicle(id);
+  if (!v) return fail("Vehicle not found");
+  if (v.status === "unavailable") return fail("This vehicle is marked unavailable");
+  if (v.status === "departed") return fail("This vehicle has already departed");
+  if (v.seats_available == null)
+    return fail("Seats have not been set for this vehicle yet. Ask the station staff to set them");
+  const left = v.seats_available;
+  if (delta < 0 && left === 0) return fail("The vehicle is full. No seats left to book");
+  if (delta < 0 && -delta > left)
+    return fail(`Only ${left} seat${left !== 1 ? "s" : ""} left. Cannot book ${-delta} passengers`);
+  if (delta > 0 && left + delta > v.seats_total) {
+    const booked = v.seats_total - left;
+    return fail(`Only ${booked} passenger${booked !== 1 ? "s are" : " is"} booked. Cannot cancel ${delta}`);
+  }
+  v.seats_available = left + delta;
+  touch();
+  return ok(withRelations(v));
+}
+
 const mock = {
   // login is a phone number, or an email for accounts registered with email
   login: (login, password) => {
@@ -151,6 +173,10 @@ const mock = {
     touch();
     return ok({ ok: true });
   },
+
+  // mate / conductor page: book or cancel passengers on a vehicle
+  bookSeats: (id, count) => mockChangeSeats(id, -count),
+  releaseSeats: (id, count) => mockChangeSeats(id, count),
 
   updateVehicle: (id, c) => {
     const v = findVehicle(id);
@@ -474,6 +500,11 @@ const real = {
         available_seats: v.seats_available ?? null,
       }),
     }),
+  bookSeats: async (id, count) =>
+    toVehicle(await request(`/vehicles/${id}/book-seats`, { method: "POST", body: json({ count }) })),
+  releaseSeats: async (id, count) =>
+    toVehicle(await request(`/vehicles/${id}/release-seats`, { method: "POST", body: json({ count }) })),
+
   updateVehicle: (id, c) => {
     const body = {};
     if ("status" in c) body.vehicle_status = c.status;

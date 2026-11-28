@@ -713,3 +713,40 @@ a {
 .role-note {
     margin: 8px 0 0;
 }
+
+/* ---------- mate / conductor page ---------- */
+.seat-board {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 14px;
+    text-align: center;
+}
+
+.seat-number {
+    font-size: 48px;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.meter {
+    height: 12px;
+    border-radius: 999px;
+    background: #E6ECE8;
+    overflow: hidden;
+    margin: 14px 0 4px;
+}
+
+.meter > div {
+    height: 100%;
+    background: var(--green);
+    transition: width 0.3s;
+}
+
+.warning {
+    color: #78350F;
+    background: #FEF3C7;
+    padding: 10px 14px;
+    border-radius: 10px;
+    margin: 12px 0 0;
+}

@@ -17,7 +17,7 @@ const ICONS = {
   requests: ["M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", "M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z", "M19 8v6", "M22 11h-6"],
 };
 
-const TITLES = { "/queue": "Vehicle queue", "/vehicles": "Vehicles", "/trips": "Trips", "/map": "Live map", "/requests": "Requests" };
+const TITLES = { "/queue": "Vehicle queue", "/vehicles": "Vehicles", "/trips": "Trips", "/map": "Live map", "/mate": "Mate", "/requests": "Requests" };
 
 export default function NavBar({ user, onLogout }) {
   const isManager = user?.role === "station_manager";
@@ -58,6 +58,7 @@ export default function NavBar({ user, onLogout }) {
         </span>
         <button onClick={onLogout}>Sign out</button>
       </header>
+      {user.role !== "mate" && ( // mates have their own app with one screen, so no tab bar
       <nav className="tabbar" aria-label="Main">
         <div className="tabbar-inner">
           {tabs.map((t) => (
@@ -69,6 +70,7 @@ export default function NavBar({ user, onLogout }) {
           ))}
         </div>
       </nav>
+      )}
     </>
   );
 }

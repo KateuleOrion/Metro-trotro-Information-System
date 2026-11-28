@@ -2,9 +2,10 @@ import { useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { api, isDemoMode } from "../api";
 
-// Log in or register as station staff or a station manager. (Mates use their own app.)
+// Log in or register as a mate (conductor), station staff or a station manager.
 // Accounts use a phone number, or an email instead. Logging in uses whichever one was registered.
 const ROLES = {
+  mate: { role: "mate", title: "Mate", demo: { phone: "0200000004", password: "mate123" } },
   staff: { role: "station_staff", title: "Station staff", demo: { phone: "0200000002", password: "staff123" } },
   manager: { role: "station_manager", title: "Station manager", demo: { phone: "0200000001", password: "demo123" } },
 };

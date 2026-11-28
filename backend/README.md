@@ -99,6 +99,12 @@ database lock so two staff members cannot corrupt the order.
 4. They log in with the phone number they registered with (or the email). Phone numbers are matched however
    they are written: `+233 24 123 4567`, `233241234567` and `024-123-4567` are the same number.
 
+## Mate (conductor) app
+Mates tap "Mate" on the first screen, register or log in like staff (manager approval), and get their own app
+with only the seat booking screen. On the backend a mate may only `GET /vehicles` and
+`POST /vehicles/{id}/book-seats` / `release-seats`; everything else returns 403. Demo mate: `0200000004` / `mate123`.
+Existing databases: run `mate_accounts_migration.sql`.
+
 ## Driver registration: how it works
 1. The driver opens the dashboard's public page `/driver-register` (no sign-in) and sends their name, phone
    number and, optionally, their vehicle. The request is saved in `driver_requests` with status `pending`.

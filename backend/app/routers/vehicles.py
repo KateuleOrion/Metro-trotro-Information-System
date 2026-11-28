@@ -3,9 +3,9 @@ from psycopg import errors as pg
 
 from ..db import get_conn
 from ..errors import ApiError
-from ..schemas import VehicleCreate, VehicleUpdate
+from ..schemas import SeatChange, VehicleCreate, VehicleUpdate
 from ..security import current_staff, require_manager
-from ..services import (audit, data_last_updated, find_or_create_route, set_seats,
+from ..services import (audit, change_seats, data_last_updated, find_or_create_route, set_seats,
                         update_vehicle, vehicle_rows)
 
 router = APIRouter(prefix="/vehicles", tags=["Vehicles"])
@@ -56,4 +56,18 @@ def edit_vehicle(vehicle_id: int, body: VehicleUpdate, staff=Depends(current_sta
         update_vehicle(conn, staff["staff_id"], vehicle_id, changes)
     except pg.ForeignKeyViolation:
         raise ApiError(422, "Unknown route or driver")
+    return vehicle_rows(conn, vehicle_id)[0]
+
+
+@router.post("/{vehicle_id}/book-seats")
+def book_seats(vehicle_id: int, body: SeatChange, staff=Depends(current_staff), conn=Depends(get_conn, scope="function")):
+    """Mate books `count` passengers onto the vehicle. Refused if fewer seats are left."""
+    change_seats(conn, staff["staff_id"], vehicle_id, -body.count)
+    return vehicle_rows(conn, vehicle_id)[0]
+
+
+@router.post("/{vehicle_id}/release-seats")
+def release_seats(vehicle_id: int, body: SeatChange, staff=Depends(current_staff), conn=Depends(get_conn, scope="function")):
+    """Mate cancels `count` bookings (a passenger got off or changed their mind)."""
+    change_seats(conn, staff["staff_id"], vehicle_id, body.count)
     return vehicle_rows(conn, vehicle_id)[0]

@@ -1,10 +1,11 @@
 """Passwords, tokens and role checks."""
 import hmac
+import re
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from . import config
@@ -43,8 +44,17 @@ def create_token(staff_id: int, role: str) -> str:
     return jwt.encode(payload, config.JWT_SECRET, algorithm="HS256")
 
 
-def current_staff(creds: HTTPAuthorizationCredentials | None = Depends(bearer), conn=Depends(get_conn, scope="function")) -> dict:
-    """Requires a valid token for an active staff account."""
+# A mate (conductor) has their own app: they may only see the vehicles and book or cancel seats.
+MATE_ALLOWED = [
+    ("GET", re.compile(r"^/auth/me$")),
+    ("GET", re.compile(r"^/vehicles$")),
+    ("POST", re.compile(r"^/vehicles/\d+/(book|release)-seats$")),
+]
+
+
+def current_staff(request: Request, creds: HTTPAuthorizationCredentials | None = Depends(bearer),
+                  conn=Depends(get_conn, scope="function")) -> dict:
+    """Requires a valid token for an active account (station staff, station manager or mate)."""
     if creds is None:
         raise ApiError(401, "Please sign in")
     try:
@@ -57,6 +67,10 @@ def current_staff(creds: HTTPAuthorizationCredentials | None = Depends(bearer), 
     ).fetchone()
     if not row or row["account_status"] != "active":
         raise ApiError(401, "Your session has expired. Please sign in again")
+    if row["role"] == "mate" and not any(
+        request.method == method and pattern.match(request.url.path) for method, pattern in MATE_ALLOWED
+    ):
+        raise ApiError(403, "Mates can only book and cancel seats")
     return {"staff_id": row["staff_id"], "name": row["full_name"], "role": row["role"]}
 
 
