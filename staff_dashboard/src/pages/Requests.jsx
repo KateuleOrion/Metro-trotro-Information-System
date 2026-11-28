@@ -87,6 +87,7 @@ function DriverRequests() {
             <div className="item-sub">Sent {when(r.submitted_at)}</div>
             <dl className="facts">
               <dt>Phone</dt><dd><a href={`tel:${r.phone.replace(/\s/g, "")}`}>{r.phone}</a></dd>
+              <dt>Login</dt><dd>{r.existing_driver ? "Existing driver, new login" : r.has_login ? "Registered in the app" : "No login"}</dd>
               {r.plate ? (
                 <>
                   <dt>Vehicle</dt><dd>{r.plate}</dd>

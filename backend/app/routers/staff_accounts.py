@@ -32,7 +32,8 @@ def list_accounts(
 ):
     order = "ASC" if status == "pending" else "DESC"  # oldest waiting account first
     return conn.execute(
-        ACCOUNT_SQL + f" WHERE s.account_status = %s ORDER BY s.created_at {order}, s.staff_id {order}", (status,)
+        ACCOUNT_SQL + f" WHERE s.account_status = %s AND s.role <> 'driver' "
+        f"ORDER BY s.created_at {order}, s.staff_id {order}", (status,)
     ).fetchall()
 
 
@@ -40,6 +41,8 @@ def _pending(conn, staff_id: int) -> dict:
     row = conn.execute("SELECT * FROM staff WHERE staff_id = %s FOR UPDATE", (staff_id,)).fetchone()
     if not row:
         raise ApiError(404, "Account not found")
+    if row["role"] == "driver":
+        raise ApiError(409, "Drivers are approved on the Drivers tab")
     if row["account_status"] != "pending":
         raise ApiError(409, "This account is not waiting for approval")
     return row

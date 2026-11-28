@@ -750,3 +750,28 @@ a {
     border-radius: 10px;
     margin: 12px 0 0;
 }
+
+/* driver app: "your turn" banner */
+.notice.turn {
+    font-weight: 800;
+    font-size: 18px;
+    text-align: center;
+}
+
+/* driver map */
+.map-box.driver-map {
+    height: 48vh;
+    margin-bottom: 12px;
+}
+
+a.button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    border-radius: 10px;
+    background: var(--green);
+    color: #fff;
+    font-weight: 700;
+    text-decoration: none;
+}

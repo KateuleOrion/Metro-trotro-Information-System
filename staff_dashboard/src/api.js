@@ -40,6 +40,8 @@ const db = {
       role: "station_staff", status: "pending", created_at: now() },
     { id: 4, name: "Kofi Boateng", phone: "0200000004", email: null, password: "mate123",
       role: "mate", status: "active", created_at: now() },
+    { id: 5, name: "Kwame Asare", phone: "0240000001", email: null, password: "driver123",
+      role: "driver", status: "active", created_at: now(), driver_id: 1 },
   ],
   routes: [
     { id: 1, name: "Central - Madina", from: "Metro Central Station", to: "Madina" },
@@ -120,10 +122,11 @@ function mockChangeSeats(id, delta) {
 
 const mock = {
   // login is a phone number, or an email for accounts registered with email
-  login: (login, password) => {
+  login: (login, password, role = null) => {
     const key = login.includes("@") ? login.trim().toLowerCase() : normalizePhone(login);
     const s = db.staff.find((x) => (login.includes("@") ? x.email === key : x.phone === key));
-    if (!s || s.password !== password) return fail("Wrong phone number, email or password");
+    // an account of another role is treated exactly like wrong details
+    if (!s || s.password !== password || (role && s.role !== role)) return fail("Wrong phone number, email or password");
     if (s.status === "pending") return fail("Your account is waiting for the station manager's approval");
     if (s.status === "rejected") return fail("Your registration was not approved. Please contact the station manager");
     return ok({ token: "fake-token", name: s.name, role: s.role, staff_id: s.id });
@@ -137,11 +140,44 @@ const mock = {
       return fail("An account with this email already exists. Please log in instead");
     const s = { id: db.nextId++, name: r.name, phone, email, password: r.password, role: r.role,
       status: "pending", created_at: now() };
+    if (r.role === "driver") {
+      // drivers are approved on the Drivers tab, through a driver request linked to this login
+      const plate = r.plate ? r.plate.toUpperCase() : null;
+      if (plate && db.vehicles.some((v) => v.plate_number === plate))
+        return fail("A vehicle with this registration number is already registered");
+      db.staff.push(s);
+      const existing = db.drivers.find((d) => d.phone === phone);
+      db.driverRequests.push({
+        id: db.nextId++, name: r.name, phone, plate, destination: r.destination ?? null, seats: r.seats ?? null,
+        status: "pending", reason: null, submitted_at: now(), reviewed_at: null, reviewed_by: null,
+        driver_id: null, vehicle_id: null, has_login: true, existing_driver: !!existing, account_id: s.id,
+        existing_driver_id: existing?.id ?? null,
+      });
+      return ok({ account_status: "pending", staff_id: s.id });
+    }
     db.staff.push(s);
     return ok({ account_status: "pending", staff_id: s.id });
   },
+  getDriverMe: async () => {
+    const account = db.staff.find((x) => x.role === "driver" && x.status === "active" && x.driver_id);
+    if (!account) return fail("Your login is not linked to a driver yet. Please contact the station manager");
+    const ids = db.queue.map((q) => q.vehicle_id);
+    const tracked = await mock.getTracking();
+    const vehicles = db.vehicles.filter((v) => v.driver_id === account.driver_id).map((v) => {
+      const i = ids.indexOf(v.id);
+      const t = tracked.vehicles.find((x) => x.id === v.id);
+      const route = db.routes.find((r) => r.id === v.route_id);
+      const dest = db.destinationCoords[(route?.to || "").toLowerCase()] || null;
+      return { ...withRelations(v), in_queue: i >= 0, queue_position: i >= 0 ? i + 1 : null,
+        vehicles_ahead: i >= 0 ? i : null, is_my_turn: i === 0, queue_status: i >= 0 ? db.queue[i].queue_status : null,
+        map: t ?? { destination: route?.to ?? null, destination_lat: dest?.[0] ?? null, destination_lon: dest?.[1] ?? null,
+          lat: null, lon: null } };
+    });
+    return ok({ id: account.driver_id, name: account.name, phone: account.phone, vehicles, station: { ...db.station },
+      last_updated: db.last_updated });
+  },
   getStaffAccounts: (status = "pending") => {
-    const list = db.staff.filter((x) => x.status === status).map(({ password: _password, ...rest }) => rest);
+    const list = db.staff.filter((x) => x.status === status && x.role !== "driver").map(({ password: _password, ...rest }) => rest);
     return ok(status === "pending" ? list : [...list].reverse());
   },
   approveStaffAccount: (id) => reviewStaff(id, { status: "active" }),
@@ -348,12 +384,17 @@ const mock = {
     const r = db.driverRequests.find((x) => x.id === id);
     if (!r) return fail("Request not found");
     if (r.status !== "pending") return fail(`This request has already been ${r.status}`);
-    if (db.drivers.some((d) => d.phone === r.phone))
+    if (!r.existing_driver_id && db.drivers.some((d) => d.phone === r.phone))
       return fail("A driver with this phone number is already registered. Reject this request instead");
     if (r.plate && db.vehicles.some((v) => v.plate_number === r.plate))
       return fail("A vehicle with this registration number is already registered. Reject this request instead");
-    const driver = { id: db.nextId++, name: r.name, phone: r.phone };
-    db.drivers.push(driver);
+    let driver = db.drivers.find((d) => d.id === r.existing_driver_id);
+    if (!driver) {
+      driver = { id: db.nextId++, name: r.name, phone: r.phone };
+      db.drivers.push(driver);
+    }
+    const account = db.staff.find((x) => x.id === r.account_id);
+    if (account) Object.assign(account, { status: "active", driver_id: driver.id }); // switch the login on
     if (r.plate) {
       const vehicle = {
         id: db.nextId++, plate_number: r.plate, route_id: routeFor(r.destination), driver_id: driver.id,
@@ -371,6 +412,8 @@ const mock = {
     if (!r) return fail("Request not found");
     if (r.status !== "pending") return fail(`This request has already been ${r.status}`);
     Object.assign(r, { status: "rejected", reason: reason || null, reviewed_at: now(), reviewed_by: "Demo Station Manager" });
+    const account = db.staff.find((x) => x.id === r.account_id);
+    if (account) account.status = "rejected";
     return ok(r);
   },
 
@@ -460,16 +503,42 @@ const toDriverRequest = (r) => ({
   reviewed_by: r.reviewed_by_name,
   driver_id: r.driver_id,
   vehicle_id: r.vehicle_id,
+  has_login: !!r.account_id, // registered with a password in the app
+  existing_driver: !!r.existing_driver_id, // already a driver, only the login is new
 });
 
 const real = {
-  login: (login, password) => request("/auth/login", { method: "POST", body: json({ login, password }) }),
+  // role = the role chosen on the first screen; the backend refuses an account with a different role
+  login: (login, password, role = null) =>
+    request("/auth/login", { method: "POST", body: json({ login, password, role }) }),
   register: async (r) => {
     const res = await request("/auth/register", {
       method: "POST",
-      body: json({ full_name: r.name, role: r.role, phone_number: r.phone || null, email: r.email || null, password: r.password }),
+      body: json({
+        full_name: r.name, role: r.role, phone_number: r.phone || null, email: r.email || null, password: r.password,
+        // drivers may register their vehicle too
+        registration_number: r.plate ?? null, destination: r.destination ?? null, capacity: r.seats ?? null,
+      }),
     });
     return res; // { account_status: "pending" } or { account_status: "active", token, name, role, staff_id }
+  },
+  // the driver's own app
+  getDriverMe: async () => {
+    const r = await request("/driver/me");
+    return {
+      id: r.driver_id, name: r.full_name, phone: r.phone_number, last_updated: r.last_updated,
+      vehicles: r.vehicles.map((v) => ({
+        ...toVehicle(v), in_queue: v.in_queue, queue_position: v.queue_position,
+        vehicles_ahead: v.vehicles_ahead, is_my_turn: v.is_my_turn, queue_status: v.queue_status,
+        map: {
+          destination: v.map.destination, destination_lat: v.map.destination_latitude,
+          destination_lon: v.map.destination_longitude, lat: v.map.latitude, lon: v.map.longitude,
+          recorded_at: v.map.recorded_at, stale: v.map.stale, age_minutes: v.map.age_minutes,
+          distance_km: v.map.distance_km, direction: v.map.direction, eta_minutes: v.map.eta_minutes,
+        },
+      })),
+      station: r.station && { name: r.station.name, lat: r.station.latitude, lon: r.station.longitude },
+    };
   },
   getStaffAccounts: async (status = "pending") =>
     (await request(`/staff/accounts?status=${status}`)).map(toStaffAccount),

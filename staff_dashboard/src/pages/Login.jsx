@@ -1,17 +1,20 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { api, isDemoMode } from "../api";
 
-// Log in or register as a mate (conductor), station staff or a station manager.
+// Log in or register as a driver, mate (conductor), station staff or a station manager.
+// Every role uses this same page and the same login; drivers can also register their vehicle.
 // Accounts use a phone number, or an email instead. Logging in uses whichever one was registered.
 const ROLES = {
+  driver: { role: "driver", title: "Driver", demo: { phone: "0240000001", password: "driver123" }, phoneOnly: true },
   mate: { role: "mate", title: "Mate", demo: { phone: "0200000004", password: "mate123" } },
   staff: { role: "station_staff", title: "Station staff", demo: { phone: "0200000002", password: "staff123" } },
   manager: { role: "station_manager", title: "Station manager", demo: { phone: "0200000001", password: "demo123" } },
 };
 const PHONE = /^\+?[0-9][0-9 -]{6,19}$/;
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-const blank = { name: "", phone: "", email: "", password: "", confirm: "" };
+const blank = { name: "", phone: "", email: "", password: "", confirm: "",
+  withVehicle: false, plate: "", destination: "", seats: "" };
 
 export default function Login({ onLogin }) {
   const { role: key } = useParams();
@@ -24,10 +27,16 @@ export default function Login({ onLogin }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [routes, setRoutes] = useState([]); // destination suggestions for drivers
+
+  useEffect(() => {
+    if (key === "driver") api.getRoutes().then(setRoutes).catch(() => {});
+  }, [key]);
 
   if (!role) return <Navigate to="/" />;
 
-  const set = (field) => (e) => setForm({ ...form, [field]: e.target.value });
+  const set = (field) => (e) =>
+    setForm({ ...form, [field]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
 
   function switchTab(next) {
     setTab(next);
@@ -44,7 +53,7 @@ export default function Login({ onLogin }) {
     }
     setBusy(true);
     try {
-      onLogin(await api.login(loginId.trim(), password));
+      onLogin(await api.login(loginId.trim(), password, role.role)); // only accounts of the chosen role
     } catch (err) {
       setError(err.message);
     }
@@ -57,6 +66,12 @@ export default function Login({ onLogin }) {
       return useEmail ? "Please enter a valid email" : "Please enter a valid phone number";
     if (form.password.length < 8) return "The password must be at least 8 characters";
     if (form.password !== form.confirm) return "The two passwords do not match";
+    if (form.withVehicle) {
+      if (!form.plate.trim()) return "Please enter your vehicle's registration number";
+      if (!form.destination.trim()) return "Please enter where your vehicle goes";
+      const seats = Number(form.seats);
+      if (!Number.isInteger(seats) || seats < 1 || seats > 100) return "Number of seats must be a whole number from 1 to 100";
+    }
     return "";
   }
 
@@ -75,6 +90,9 @@ export default function Login({ onLogin }) {
         phone: useEmail ? null : form.phone.trim(),
         email: useEmail ? form.email.trim() : null,
         password: form.password,
+        ...(form.withVehicle
+          ? { plate: form.plate.trim(), destination: form.destination.trim(), seats: Number(form.seats) }
+          : {}),
       });
       if (res.account_status === "active" && res.token) {
         onLogin(res);
@@ -93,7 +111,7 @@ export default function Login({ onLogin }) {
   }
 
   const idLabel = useEmail ? "Email" : "Phone number";
-  const switchId = (
+  const switchId = role.phoneOnly ? null : (
     <button type="button" className="link" onClick={() => { setUseEmail(!useEmail); setError(""); }}>
       {useEmail ? "Use phone number instead" : "Use email instead"}
     </button>
@@ -175,6 +193,34 @@ export default function Login({ onLogin }) {
               Confirm password
               <input type="password" autoComplete="new-password" value={form.confirm} onChange={set("confirm")} />
             </label>
+            {key === "driver" && (
+              <>
+                <label className="check">
+                  <input type="checkbox" checked={form.withVehicle} onChange={set("withVehicle")} />
+                  I also want to register my vehicle
+                </label>
+                {form.withVehicle && (
+                  <>
+                    <label>
+                      Registration number
+                      <input value={form.plate} onChange={set("plate")} placeholder="e.g. GR-1234-24" autoCapitalize="characters" />
+                    </label>
+                    <label>
+                      Destination
+                      <input list="driver-destinations" value={form.destination} onChange={set("destination")}
+                        placeholder="e.g. Madina" autoComplete="off" />
+                      <datalist id="driver-destinations">
+                        {[...new Set(routes.map((r) => r.to))].map((n) => <option key={n} value={n} />)}
+                      </datalist>
+                    </label>
+                    <label>
+                      Number of seats
+                      <input type="number" inputMode="numeric" min="1" max="100" value={form.seats} onChange={set("seats")} />
+                    </label>
+                  </>
+                )}
+              </>
+            )}
             {error && <p className="error" role="alert">{error}</p>}
             <button type="submit" disabled={busy}>{busy ? "Creating account..." : "Create account"}</button>
             <p className="muted center hint">New accounts may need a station manager's approval before you can log in.</p>

@@ -10,6 +10,7 @@ from ..errors import ApiError
 from ..schemas import LoginIn, RegisterIn
 from ..security import create_token, current_staff, hash_password, is_hashed, verify_password
 from ..services import audit, normalize_phone
+from .driver_requests import create_driver_account
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -54,10 +55,13 @@ def login(body: LoginIn, conn=Depends(get_conn, scope="function")):
         f"SELECT staff_id, full_name, role, password_hash, account_status FROM staff WHERE {where}", (value,)
     ).fetchone()
 
-    if not row or not verify_password(body.password, row["password_hash"]):
+    # An account of another role (e.g. station manager details on the Mate page) is treated exactly
+    # like wrong details, so the message never tells anyone what role an account has.
+    wrong_role = bool(row and body.role and row["role"] != body.role)
+    if not row or wrong_role or not verify_password(body.password, row["password_hash"]):
         _failures[key].append(time.monotonic())
         audit(conn, row["staff_id"] if row else None, "LOGIN_FAILED", "staff",
-              row["staff_id"] if row else None, {"login": key})
+              row["staff_id"] if row else None, {"login": key, **({"chose_role": body.role} if wrong_role else {})})
         conn.commit()  # keep the audit record even though we return an error
         raise ApiError(401, "Wrong phone number, email or password")
     if row["account_status"] != "active":
@@ -80,6 +84,9 @@ def register(body: RegisterIn, conn=Depends(get_conn, scope="function")):
     and a password. By default the account waits for a station manager's approval."""
     phone = normalize_phone(body.phone_number) if body.phone_number else None
     email = body.email.lower() if body.email else None
+    if body.role == "driver":
+        # Drivers always wait for the station manager, who approves them on the Drivers tab.
+        return create_driver_account(conn, body, phone, hash_password(body.password))
     if phone and conn.execute("SELECT 1 FROM staff WHERE phone_number = %s", (phone,)).fetchone():
         raise ApiError(409, "An account with this phone number already exists. Please log in instead")
     if email and conn.execute("SELECT 1 FROM staff WHERE lower(email) = %s", (email,)).fetchone():

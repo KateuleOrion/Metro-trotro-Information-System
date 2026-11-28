@@ -148,8 +148,14 @@ def destinations(conn=Depends(get_conn, scope="function")):
 @router.post("/position", status_code=201)
 def report_position(body: PositionIn, staff=Depends(current_staff), conn=Depends(get_conn, scope="function")):
     """Record where a vehicle is now. `recorded_at` is optional (use it to send a delayed report)."""
-    if not conn.execute("SELECT 1 FROM vehicles WHERE vehicle_id = %s", (body.vehicle_id,)).fetchone():
+    vehicle = conn.execute(
+        "SELECT v.vehicle_id, d.account_id FROM vehicles v LEFT JOIN drivers d ON d.driver_id = v.driver_id "
+        "WHERE v.vehicle_id = %s", (body.vehicle_id,)
+    ).fetchone()
+    if not vehicle:
         raise ApiError(404, "Vehicle not found")
+    if staff["role"] == "driver" and vehicle["account_id"] != staff["staff_id"]:
+        raise ApiError(403, "You can only share the location of your own vehicle")
     when = body.recorded_at
     if when is not None:
         if when.tzinfo is None:

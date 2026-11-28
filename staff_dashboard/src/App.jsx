@@ -9,12 +9,14 @@ import Trips from "./pages/Trips";
 import MapPage from "./pages/Map";
 import Mate from "./pages/Mate";
 import Requests from "./pages/Requests";
-import DriverRegister from "./pages/DriverRegister";
+import DriverHome from "./pages/DriverHome";
+import DriverMap from "./pages/DriverMap";
 
 export default function App() {
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem("user") || "null"));
   const isManager = user?.role === "station_manager";
   const isMate = user?.role === "mate";
+  const isDriver = user?.role === "driver";
 
   function handleLogin(u) {
     localStorage.setItem("user", JSON.stringify(u));
@@ -31,10 +33,27 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public page: a driver asks to be registered. No sign-in needed. */}
-        <Route path="/driver-register" element={<DriverRegister />} />
+        {/* Old address for driver sign-up: drivers now use the same login page as everyone else. */}
+        <Route path="/driver-register" element={<Navigate to="/account/driver" />} />
 
-        {user && isMate ? (
+        {user && isDriver ? (
+          // The driver's own app: their vehicle and place in the queue, and a map. No staff tabs.
+          <Route
+            path="*"
+            element={
+              <>
+                <NavBar user={user} onLogout={handleLogout} />
+                <main className="page">
+                  <Routes>
+                    <Route path="/driver" element={<DriverHome />} />
+                    <Route path="/driver/map" element={<DriverMap />} />
+                    <Route path="*" element={<Navigate to="/driver" />} />
+                  </Routes>
+                </main>
+              </>
+            }
+          />
+        ) : user && isMate ? (
           // The mate's own app: only the seat booking screen, no staff tabs.
           <Route
             path="*"

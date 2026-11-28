@@ -55,7 +55,7 @@ or `../database/metro_trotro_db.sql`, or at the path in `SCHEMA_FILE`.
 | GET /routes, POST /routes | public / manager | Routes |
 | GET /drivers | staff | Registered drivers. There is no POST: drivers are added only by approving a request |
 | POST /driver/requests, GET /driver/requests/status?phone= | public | A driver asks to be registered (`full_name`, `phone_number`, optional `registration_number` + `destination` + `capacity`) and checks the result |
-| POST /driver/login | public | Driver app login with only `{"phone_number"}`. Returns the driver and their vehicles; 403 if the request is waiting or was rejected; 404 if not registered (sign up instead) |
+| GET /driver/me | driver | The signed-in driver's own vehicles, seats free and place in the queue (driver app) |
 | GET /driver/requests?status=pending\|approved\|rejected\|all | manager | Driver registration requests (waiting ones oldest first) |
 | POST /driver/requests/{id}/approve, POST /driver/requests/{id}/reject | manager | Approve (creates the driver, and the vehicle if one was given) or reject (optional `reason`, shown to the driver) |
 | GET /vehicles, POST /vehicles, PUT /vehicles/{id} | staff / manager / staff | Vehicles, seats, status. `POST /vehicles` accepts a typed-in `destination` instead of `route_id` (an existing route is reused, otherwise one is added). The driver must be a registered one, given by `driver_id` |
@@ -98,6 +98,16 @@ database lock so two staff members cannot corrupt the order.
    the account is waiting for approval.
 4. They log in with the phone number they registered with (or the email). Phone numbers are matched however
    they are written: `+233 24 123 4567`, `233241234567` and `024-123-4567` are the same number.
+
+## Driver app
+Drivers use the same login page and sessions as everyone else (`POST /auth/register` with `role: "driver"`,
+then `POST /auth/login`). Registering creates a pending login and a driver request linked to it; the station
+manager approves it on Requests -> Drivers, which creates the driver (and vehicle, if given) and switches the
+login on. A driver already in the system who has no login registers with their phone number, and approval links
+the login to their record. A driver may only call `GET /driver/me` (and `/auth/me`), and `POST /tracking/position`
+for their own vehicle (the driver Map tab). `GET /driver/me` includes each vehicle's map details: position,
+destination, distance, direction and ETA. The driver app's "Directions with live traffic" button opens Google Maps. Demo driver: `0240000001` /
+`driver123`. Existing databases: run `driver_accounts_migration.sql`.
 
 ## Mate (conductor) app
 Mates tap "Mate" on the first screen, register or log in like staff (manager approval), and get their own app

@@ -10,7 +10,7 @@ export const STATUS_LABELS = {
 export const statusLabel = (status) => STATUS_LABELS[status] ?? "Unavailable";
 
 // The kinds of account. Mates (conductors) are not staff: they get their own mate app.
-export const ROLE_LABELS = { station_staff: "Station staff", station_manager: "Station manager", mate: "Mate" };
+export const ROLE_LABELS = { station_staff: "Station staff", station_manager: "Station manager", mate: "Mate", driver: "Driver" };
 
 export const PERIODS = [
   { value: "all", label: "All time" },

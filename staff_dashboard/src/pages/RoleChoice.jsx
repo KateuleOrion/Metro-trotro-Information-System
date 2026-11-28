@@ -6,7 +6,7 @@ import { Link } from "react-router-dom";
 const ROLES = [
   { key: "passenger", title: "Passenger",
     note: "Passengers do not need an account. Open the Metro Trotro passenger app to search for a vehicle to your destination and see how many seats are free." },
-  { key: "driver", title: "Driver", to: "/driver-register" },
+  { key: "driver", title: "Driver", to: "/account/driver" },
   { key: "mate", title: "Mate", to: "/account/mate" },
   { key: "staff", title: "Station staff", to: "/account/staff" },
   { key: "manager", title: "Station manager", to: "/account/manager" },

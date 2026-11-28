@@ -75,7 +75,7 @@ def test_phone_or_email_is_needed(client):
 
 @pytest.mark.parametrize("changes", [
     {"password": "short"}, {"phone_number": "abc"}, {"email": "not-an-email", "phone_number": None},
-    {"full_name": "A"}, {"role": "driver"},
+    {"full_name": "A"}, {"role": "passenger"},
 ])
 def test_bad_registration_details_are_rejected(client, changes):
     assert register(client, **changes).status_code == 422
@@ -138,3 +138,36 @@ def test_new_manager_gets_manager_rights_after_approval(client, manager):
     client.post(f"/staff/accounts/{sid}/approve", headers=manager)
     token = login(client, "0244999888", "secret123").json()["token"]
     assert client.get("/staff/accounts", headers={"Authorization": f"Bearer {token}"}).status_code == 200
+
+
+# ------------------------------------------------------------------ the login page's role must match the account
+WRONG = "Wrong phone number, email or password"
+
+
+@pytest.mark.parametrize("phone,password,chosen", [
+    ("0200000001", "demo123", "mate"),              # manager on the mate page
+    ("0200000004", "mate123", "station_staff"),     # mate on the station staff page
+    ("0200000004", "mate123", "station_manager"),   # mate on the manager page
+    ("0200000002", "staff123", "station_manager"),  # station staff on the manager page
+    ("0240000001", "driver123", "mate"),            # driver on the mate page
+    ("0200000001", "demo123", "station_staff"),     # manager on the station staff page
+])
+def test_wrong_role_looks_like_wrong_details(client, phone, password, chosen):
+    r = client.post("/auth/login", json={"login": phone, "password": password, "role": chosen})
+    assert r.status_code == 401 and r.json()["detail"] == WRONG and "token" not in r.json()
+
+
+@pytest.mark.parametrize("phone,password,role", [
+    ("0200000001", "demo123", "station_manager"), ("0200000002", "staff123", "station_staff"),
+    ("0200000004", "mate123", "mate"), ("0240000001", "driver123", "driver"),
+])
+def test_right_role_logs_in(client, phone, password, role):
+    r = client.post("/auth/login", json={"login": phone, "password": password, "role": role})
+    assert r.status_code == 200 and r.json()["role"] == role
+
+
+def test_wrong_role_counts_towards_the_attempt_limit(client):
+    for _ in range(config.LOGIN_MAX_FAILURES):
+        client.post("/auth/login", json={"login": "0200000004", "password": "mate123", "role": "station_staff"})
+    r = client.post("/auth/login", json={"login": "0200000004", "password": "mate123", "role": "mate"})
+    assert r.status_code == 429

@@ -44,17 +44,25 @@ def create_token(staff_id: int, role: str) -> str:
     return jwt.encode(payload, config.JWT_SECRET, algorithm="HS256")
 
 
-# A mate (conductor) has their own app: they may only see the vehicles and book or cancel seats.
-MATE_ALLOWED = [
-    ("GET", re.compile(r"^/auth/me$")),
-    ("GET", re.compile(r"^/vehicles$")),
-    ("POST", re.compile(r"^/vehicles/\d+/(book|release)-seats$")),
-]
+# Mates (conductors) and drivers have their own apps, so each may only call what their app needs.
+# Station staff and station managers are not limited here (managers are checked by require_manager).
+ROLE_LIMITS = {
+    "mate": ("Mates can only book and cancel seats", [
+        ("GET", re.compile(r"^/auth/me$")),
+        ("GET", re.compile(r"^/vehicles$")),
+        ("POST", re.compile(r"^/vehicles/\d+/(book|release)-seats$")),
+    ]),
+    "driver": ("Drivers can only see their own vehicles", [
+        ("GET", re.compile(r"^/auth/me$")),
+        ("GET", re.compile(r"^/driver/me$")),
+        ("POST", re.compile(r"^/tracking/position$")),  # only for their own vehicle, checked there
+    ]),
+}
 
 
 def current_staff(request: Request, creds: HTTPAuthorizationCredentials | None = Depends(bearer),
                   conn=Depends(get_conn, scope="function")) -> dict:
-    """Requires a valid token for an active account (station staff, station manager or mate)."""
+    """Requires a valid token for an active account (station staff, station manager, mate or driver)."""
     if creds is None:
         raise ApiError(401, "Please sign in")
     try:
@@ -67,10 +75,10 @@ def current_staff(request: Request, creds: HTTPAuthorizationCredentials | None =
     ).fetchone()
     if not row or row["account_status"] != "active":
         raise ApiError(401, "Your session has expired. Please sign in again")
-    if row["role"] == "mate" and not any(
-        request.method == method and pattern.match(request.url.path) for method, pattern in MATE_ALLOWED
-    ):
-        raise ApiError(403, "Mates can only book and cancel seats")
+    if row["role"] in ROLE_LIMITS:
+        message, allowed = ROLE_LIMITS[row["role"]]
+        if not any(request.method == method and pattern.match(request.url.path) for method, pattern in allowed):
+            raise ApiError(403, message)
     return {"staff_id": row["staff_id"], "name": row["full_name"], "role": row["role"]}
 
 

@@ -17,7 +17,7 @@ const ICONS = {
   requests: ["M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", "M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z", "M19 8v6", "M22 11h-6"],
 };
 
-const TITLES = { "/queue": "Vehicle queue", "/vehicles": "Vehicles", "/trips": "Trips", "/map": "Live map", "/mate": "Mate", "/requests": "Requests" };
+const TITLES = { "/queue": "Vehicle queue", "/vehicles": "Vehicles", "/trips": "Trips", "/map": "Live map", "/mate": "Mate", "/driver": "Driver", "/driver/map": "Map", "/requests": "Requests" };
 
 export default function NavBar({ user, onLogout }) {
   const isManager = user?.role === "station_manager";
@@ -41,7 +41,10 @@ export default function NavBar({ user, onLogout }) {
     };
   }, [isManager]);
 
-  const tabs = [
+  const tabs = user.role === "driver" ? [
+    { to: "/driver", label: "My vehicle", icon: "vehicles", end: true },
+    { to: "/driver/map", label: "Map", icon: "map" },
+  ] : [
     { to: "/queue", label: "Queue", icon: "queue" },
     { to: "/vehicles", label: "Vehicles", icon: "vehicles" },
     { to: "/trips", label: "Trips", icon: "trips" },
@@ -58,11 +61,11 @@ export default function NavBar({ user, onLogout }) {
         </span>
         <button onClick={onLogout}>Sign out</button>
       </header>
-      {user.role !== "mate" && ( // mates have their own app with one screen, so no tab bar
+      {user.role !== "mate" && ( // the mate's app has one screen, so no tab bar
       <nav className="tabbar" aria-label="Main">
         <div className="tabbar-inner">
           {tabs.map((t) => (
-            <NavLink key={t.to} to={t.to}>
+            <NavLink key={t.to} to={t.to} end={t.end}>
               <Icon d={ICONS[t.icon]} />
               {t.label}
               {t.count > 0 && <span className="badge" aria-label={`${t.count} waiting`}>{t.count}</span>}

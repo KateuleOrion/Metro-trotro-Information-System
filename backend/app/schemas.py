@@ -18,6 +18,9 @@ class LoginIn(Base):
     login: Optional[str] = Field(default=None, min_length=3, max_length=255)
     email: Optional[str] = Field(default=None, min_length=3, max_length=255)
     password: str = Field(min_length=1, max_length=72)
+    # The role the person chose on the first screen. If given, the account must have this role:
+    # a station manager cannot log in on the Mate page, and so on.
+    role: Optional[Literal["station_staff", "station_manager", "mate", "driver"]] = None
 
     @model_validator(mode="after")
     def need_login(self):
@@ -31,18 +34,30 @@ EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
 
 
 class RegisterIn(Base):
-    """A new station staff, station manager or mate (conductor) account. Give a phone number, or an
-    email instead; at least one is needed."""
+    """A new account: station staff, station manager, mate (conductor) or driver. Give a phone number,
+    or an email instead (drivers need a phone number). Drivers may also give their vehicle:
+    registration_number, destination and capacity, all three or none."""
     full_name: str = Field(min_length=2, max_length=100)
-    role: Literal["station_staff", "station_manager", "mate"]
+    role: Literal["station_staff", "station_manager", "mate", "driver"]
     phone_number: Optional[str] = Field(default=None, pattern=PHONE_PATTERN)
     email: Optional[str] = Field(default=None, max_length=255, pattern=EMAIL_PATTERN)
     password: str = Field(min_length=8, max_length=72)
+    registration_number: Optional[str] = Field(default=None, min_length=1, max_length=20)
+    destination: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    capacity: Optional[int] = Field(default=None, ge=1, le=100)
 
     @model_validator(mode="after")
     def phone_or_email(self):
         if not (self.phone_number or self.email):
             raise ValueError("Please enter a phone number, or an email instead")
+        vehicle = [self.registration_number, self.destination, self.capacity]
+        if any(x is not None for x in vehicle):
+            if self.role != "driver":
+                raise ValueError("Only drivers can register a vehicle")
+            if not all(x is not None for x in vehicle):
+                raise ValueError("To register a vehicle, give its registration number, destination and number of seats")
+        if self.role == "driver" and not self.phone_number:
+            raise ValueError("Drivers must register with a phone number")
         return self
 
 
